@@ -1,55 +1,45 @@
 /**
- * ============================
- * SERVER.JS — BACKEND OVERVIEW
- * ============================
+ * =========================================================
+ * SERVER.JS — BACKEND (RENDER + OPENAI + SUPABASE)
+ * =========================================================
  *
- * This file is the SERVER-SIDE of our application.
+ * This file is the SERVER-SIDE of the application.
  *
  * It does NOT run in the browser and is NEVER visible to users.
- * Instead, it runs on a backend server (locally for now, later deployed).
+ * It runs on a backend server (locally or deployed on Render).
  *
- * Its role in the overall system:
+ * ARCHITECTURE OVERVIEW
+ * ---------------------
  *
  *   [ Framer Website (Frontend) ]
  *                |
- *                |  HTTP requests (form submission, data fetching)
+ *                |  HTTP requests (multipart/form-data, JSON)
  *                |
  *        [ THIS SERVER (Backend) ]
  *                |
- *        ┌───────┴────────┐
- *        |                |
- *   [ OpenAI API ]   [ Supabase ]
- *        |                |
- *   Image generation   Database + Storage
+ *        ┌───────────────┬────────────────┐
+ *        |               |                |
+ *   [ OpenAI API ]   [ Supabase DB ]   [ Supabase Storage ]
+ *        |               |                |
+ *   Image generation   User records    Generated images
  *
- *
- * Concretely, this server:
+ * WHAT THIS SERVER DOES
+ * ---------------------
  * 1. Receives form submissions from Framer (name, email, optional image)
  * 2. If an image is provided:
  *      - sends it to OpenAI to generate a new image
- *      - stores the generated image in Supabase Storage
- * 3. Stores the user’s name, email, and image URL in Supabase Database
+ *      - uploads the generated image to Supabase Storage
+ * 3. Stores name, email, and image URL in Supabase Database
  * 4. Exposes an endpoint to fetch all community members
  *
- * IMPORTANT:
- * - This server holds SECRET KEYS (OpenAI + Supabase service role)
- * - Those secrets must NEVER be placed in Framer or frontend code
- * - Framer will only ever talk to THIS server
+ * DEPLOYMENT NOTES (RENDER)
+ * ------------------------
+ * - Render free instances have limited CPU
+ * - Long requests (OpenAI image generation) may be slow or fail
+ * - We log EVERY critical step so failures are visible in Render Logs
  */
 
-
-
-/**
- * ============================
- * ENVIRONMENT SETUP
- * ============================
- */
-
-// Loads environment variables from the .env file into process.env
-// This is how we safely store secrets (API keys, URLs, etc.)
 require("dotenv").config()
-
-
 
 /**
  * ============================
@@ -57,23 +47,12 @@ require("dotenv").config()
  * ============================
  */
 
-// Express: minimal web server framework
-const express = require("express")
-
-// Multer: middleware to handle file uploads (multipart/form-data)
-const multer = require("multer")
-
-// CORS: controls which websites are allowed to call this server
-const cors = require("cors")
-
-// OpenAI client (used to generate images)
-const OpenAI = require("openai")
-const { toFile } = require("openai")
-
-// Supabase client (used for database + storage)
-const { createClient } = require("@supabase/supabase-js")
-
-
+const express = require("express")          // Web server framework
+const multer = require("multer")            // Handles file uploads
+const cors = require("cors")                // Cross-origin requests
+const OpenAI = require("openai")             // OpenAI API client
+const { toFile } = require("openai")         // Converts buffers to files
+const { createClient } = require("@supabase/supabase-js") // Supabase client
 
 /**
  * ============================
@@ -83,26 +62,19 @@ const { createClient } = require("@supabase/supabase-js")
 
 const app = express()
 
-// Multer instance with in-memory storage
-// Uploaded files will be available as buffers in req.file
+// Multer with in-memory storage (files available as req.file.buffer)
 const upload = multer()
 
-// Allows this server to parse JSON bodies (not used for file uploads,
-// but useful for other endpoints)
+// Allow JSON parsing (useful for non-file endpoints)
 app.use(express.json())
-
-
 
 /**
  * ============================
  * CORS CONFIGURATION
  * ============================
  *
- * This controls which frontend origins are allowed to send requests
- * to this server (e.g. your Framer site).
- *
- * For now, this value comes from the .env file.
- * Later, it will be your deployed Framer domain.
+ * Controls which frontend origins may call this server.
+ * Example: https://your-site.framer.website
  */
 
 app.use(
@@ -111,34 +83,25 @@ app.use(
   })
 )
 
-
-
 /**
  * ============================
- * OPENAI CLIENT SETUP
+ * OPENAI CLIENT
  * ============================
- *
- * This client is used ONLY on the server.
- * The API key is secret and never exposed to the browser.
  */
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-
-
 /**
  * ============================
- * SUPABASE CLIENT SETUP
+ * SUPABASE CLIENT
  * ============================
  *
- * We use the SUPABASE SERVICE ROLE KEY here.
- *
- * Why?
- * - It allows unrestricted access to database + storage
- * - It bypasses Row Level Security
- * - It must NEVER be used in frontend code
+ * Uses SERVICE ROLE KEY:
+ * - full access to database + storage
+ * - bypasses Row Level Security
+ * - NEVER expose this key to frontend
  */
 
 const supabase = createClient(
@@ -146,17 +109,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-
-
 /**
  * ============================
  * IMAGE GENERATION PROMPT
  * ============================
- *
- * This is the prompt sent to OpenAI when an image is uploaded.
- * It defines the visual style of the generated image.
- *
- * We can refine or replace this later without touching Framer.
  */
 
 const PIXEL_PROMPT = `
@@ -165,141 +121,148 @@ for the comic strip "Peanuts". They are standing up, the background is white,
 and they should not have facial hair.
 `
 
-
-
 /**
  * ======================================================
  * POST /submitMember
  * ======================================================
  *
- * This endpoint is called when the Framer form is submitted.
- *
- * It receives:
- * - name  (text)
- * - email (text)
+ * Receives multipart/form-data:
+ * - name  (string)
+ * - email (string)
  * - image (optional file)
  *
- * It performs the following steps:
+ * FLOW:
  * 1. Validate name + email
- * 2. If an image is provided:
- *    - Send it to OpenAI
- *    - Upload the generated image to Supabase Storage
- * 3. Save name, email, and image URL to Supabase Database
- * 4. Return a success response
+ * 2. If image exists:
+ *    - Generate image via OpenAI
+ *    - Upload generated image to Supabase Storage
+ * 3. Save user record to Supabase Database
  */
 
 app.post("/submitMember", upload.single("image"), async (req, res) => {
   try {
-    // Extract and clean form fields
+    console.log("----- NEW SUBMISSION -----")
+
     const name = req.body.name?.trim()
     const email = req.body.email?.trim()
 
-    // Basic validation
     if (!name || !email) {
+      console.log("Validation failed: missing name or email")
       return res.status(400).json({ error: "Missing name or email" })
     }
 
-    // This will hold the public URL of the generated image (if any)
     let imageUrl = null
-
-
 
     /**
      * ============================
      * IMAGE PROCESSING (OPTIONAL)
      * ============================
-     *
-     * This block only runs if a file was uploaded.
-     * If no image is provided, we skip everything here.
      */
 
     if (req.file) {
-      // Convert the uploaded image buffer into a format OpenAI expects
-      const openaiFile = await toFile(
-        req.file.buffer,
-        req.file.originalname || "upload.png",
-        { type: req.file.mimetype }
-      )
-
-      // Call OpenAI to generate a new image based on the uploaded photo
-      const result = await openai.images.edit({
-        model: process.env.OPENAI_IMAGE_MODEL,
-        image: openaiFile,
-        prompt: PIXEL_PROMPT,
-        size: "1024x1024",
-        background: "transparent",
+      console.log("Image received:", {
+        filename: req.file.originalname,
+        type: req.file.mimetype,
+        size: req.file.size,
       })
 
-      // Extract the base64 image returned by OpenAI
-      const base64 = result.data[0].b64_json
-      const buffer = Buffer.from(base64, "base64")
+      try {
+        // Convert uploaded image buffer to OpenAI file
+        const openaiFile = await toFile(
+          req.file.buffer,
+          req.file.originalname || "upload.png",
+          { type: req.file.mimetype }
+        )
 
-      // Define where the image will live inside the storage bucket
-      const filePath = `community/${Date.now()}-${name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")}.png`
+        console.log("Sending image to OpenAI...")
 
-      // Upload the image to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("neighbors")
-        .upload(filePath, buffer, {
-          contentType: "image/png",
+        const result = await openai.images.edit({
+          model: process.env.OPENAI_IMAGE_MODEL,
+          image: openaiFile,
+          prompt: PIXEL_PROMPT,
+          size: "1024x1024",
+          background: "transparent",
         })
 
-      if (uploadError) {
-        throw new Error(uploadError.message)
+        console.log("OpenAI image generation completed")
+
+        const base64 = result.data?.[0]?.b64_json
+        if (!base64) {
+          throw new Error("OpenAI returned no image data")
+        }
+
+        const buffer = Buffer.from(base64, "base64")
+
+        const filePath = `community/${Date.now()}-${name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")}.png`
+
+        console.log("Uploading image to Supabase:", filePath)
+
+        const { error: uploadError } = await supabase.storage
+          .from("neighbors")
+          .upload(filePath, buffer, {
+            contentType: "image/png",
+          })
+
+        if (uploadError) {
+          throw uploadError
+        }
+
+        const { data } = supabase.storage
+          .from("neighbors")
+          .getPublicUrl(filePath)
+
+        imageUrl = data.publicUrl
+
+        console.log("Image successfully stored:", imageUrl)
+
+      } catch (imageError) {
+        // IMPORTANT: image failure does NOT crash the whole request
+        console.error("Image processing failed:", imageError.message)
+        imageUrl = null
       }
 
-      // Get a public URL for the uploaded image
-      const { data } = supabase.storage
-        .from("neighbors")
-        .getPublicUrl(filePath)
-
-      imageUrl = data.publicUrl
+    } else {
+      console.log("No image uploaded")
     }
-
-
 
     /**
      * ============================
      * DATABASE INSERT
      * ============================
-     *
-     * We now store the user in the community_members table.
-     * image_url can be NULL if no image was uploaded.
      */
+
+    console.log("Saving user to database")
 
     const { error: dbError } = await supabase
       .from("community_members")
       .insert([{ name, email, image_url: imageUrl }])
 
     if (dbError) {
-      throw new Error(dbError.message)
+      throw dbError
     }
 
-    // Everything succeeded
+    console.log("User saved successfully")
     res.json({ ok: true })
 
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
+    console.error("Request failed:", err)
+    res.status(500).json({
+      error:'server error while processing submission',
+    })
   }
 })
-
-
 
 /**
  * ======================================================
  * GET /community
  * ======================================================
  *
- * This endpoint returns ALL community members.
- *
- * It is used by:
- * - the Community page on the Framer website
- * - the future mobile app
- *
- * It simply reads from the database and returns JSON.
+ * Returns all community members.
+ * Used by:
+ * - Framer Community page
+ * - Future app
  */
 
 app.get("/community", async (req, res) => {
@@ -309,39 +272,29 @@ app.get("/community", async (req, res) => {
     .order("created_at", { ascending: false })
 
   if (error) {
+    console.error("Failed to fetch community:", error)
     return res.status(500).json({ error: error.message })
   }
 
   res.json(data)
 })
 
-
-
 /**
  * ============================
  * HEALTH CHECK
  * ============================
- *
- * Simple endpoint to verify the server is running.
- * Useful for deployment monitoring.
  */
 
 app.get("/health", (_, res) => {
   res.json({ ok: true })
 })
 
-
-
 /**
  * ============================
  * START SERVER
  * ============================
- *
- * The server listens on the port defined in .env.
- * Locally this is usually 3001.
- * In production, the hosting provider will set the port.
  */
 
 app.listen(process.env.PORT, () => {
-  console.log(`Server running on http://localhost:${process.env.PORT}`)
+  console.log(`Server running on port ${process.env.PORT}`)
 })
