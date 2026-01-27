@@ -2,7 +2,7 @@
  * =========================================================
  * SERVER.JS — BACKEND (RENDER + OPENAI + SUPABASE)
  * =========================================================
- *
+ * Paul is here 
  * This file is the SERVER-SIDE of the application.
  *
  * It does NOT run in the browser and is NEVER visible to users.
@@ -40,7 +40,7 @@
  */
 
 require("dotenv").config()
-
+let paul = 2
 /**
  * ============================
  * IMPORT DEPENDENCIES
