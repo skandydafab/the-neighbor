@@ -1,300 +1,160 @@
-/**
- * =========================================================
- * SERVER.JS — BACKEND (RENDER + OPENAI + SUPABASE)
- * =========================================================
- * Paul is here 
- * This file is the SERVER-SIDE of the application.
- *
- * It does NOT run in the browser and is NEVER visible to users.
- * It runs on a backend server (locally or deployed on Render).
- *
- * ARCHITECTURE OVERVIEW
- * ---------------------
- *
- *   [ Framer Website (Frontend) ]
- *                |
- *                |  HTTP requests (multipart/form-data, JSON)
- *                |
- *        [ THIS SERVER (Backend) ]
- *                |
- *        ┌───────────────┬────────────────┐
- *        |               |                |
- *   [ OpenAI API ]   [ Supabase DB ]   [ Supabase Storage ]
- *        |               |                |
- *   Image generation   User records    Generated images
- *
- * WHAT THIS SERVER DOES
- * ---------------------
- * 1. Receives form submissions from Framer (name, email, optional image)
- * 2. If an image is provided:
- *      - sends it to OpenAI to generate a new image
- *      - uploads the generated image to Supabase Storage
- * 3. Stores name, email, and image URL in Supabase Database
- * 4. Exposes an endpoint to fetch all community members
- *
- * DEPLOYMENT NOTES (RENDER)
- * ------------------------
- * - Render free instances have limited CPU
- * - Long requests (OpenAI image generation) may be slow or fail
- * - We log EVERY critical step so failures are visible in Render Logs
- */
+// Import dependencies
+const express = require("express");
+const multer = require("multer");
+const cors = require("cors");
+const OpenAI = require("openai");
+const { toFile } = require("openai");
+const { createClient } = require("@supabase/supabase-js");
 
-require("dotenv").config()
-let paul = 2
-/**
- * ============================
- * IMPORT DEPENDENCIES
- * ============================
- */
+// Initialize server
+const app = express();
 
-const express = require("express")          // Web server framework
-const multer = require("multer")            // Handles file uploads
-const cors = require("cors")                // Cross-origin requests
-const OpenAI = require("openai")             // OpenAI API client
-const { toFile } = require("openai")         // Converts buffers to files
-const { createClient } = require("@supabase/supabase-js") // Supabase client
+// Set up middlewares
+app.use(express.json());
+app.use(cors({origin: process.env.CORS_ORIGIN}));
+const upload = multer();
 
-/**
- * ============================
- * SERVER INITIALIZATION
- * ============================
- */
+// Load .env variables 
+require("dotenv").config();
 
-const app = express()
+// Set up clients
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Multer with in-memory storage (files available as req.file.buffer)
-const upload = multer()
+// Prompt function 
+function getPrompt(activity) {
+  if (!activity) {
+    return "Using the provided photo as reference, create an original baby character for the comic strip \
+  'Peanuts'. They are standing up, the background is white, and they should not have facial hair.";
+  } else {
+    return `Using the provided photo as reference, create an original baby character for the comic strip 'Peanuts'. They are \
+  standing up, the background is white, and they should not have facial hair. They are doing the following activity: ${activity}.`;
+  }
+}
 
-// Allow JSON parsing (useful for non-file endpoints)
-app.use(express.json())
-
-/**
- * ============================
- * CORS CONFIGURATION
- * ============================
- *
- * Controls which frontend origins may call this server.
- * Example: https://your-site.framer.website
- */
-
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN,
-  })
-)
-
-/**
- * ============================
- * OPENAI CLIENT
- * ============================
- */
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-/**
- * ============================
- * SUPABASE CLIENT
- * ============================
- *
- * Uses SERVICE ROLE KEY:
- * - full access to database + storage
- * - bypasses Row Level Security
- * - NEVER expose this key to frontend
- */
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-/**
- * ============================
- * IMAGE GENERATION PROMPT
- * ============================
- */
-
-const PIXEL_PROMPT = `
-Using the provided photo as reference, create an original baby character
-for the comic strip "Peanuts". They are standing up, the background is white,
-and they should not have facial hair.
-`
-
-/**
- * ======================================================
- * POST /submitMember
- * ======================================================
- *
- * Receives multipart/form-data:
- * - name  (string)
- * - email (string)
- * - image (optional file)
- *
- * FLOW:
- * 1. Validate name + email
- * 2. If image exists:
- *    - Generate image via OpenAI
- *    - Upload generated image to Supabase Storage
- * 3. Save user record to Supabase Database
- */
-
+/* -- Set up POST /submitMember endpoint -- */
 app.post("/submitMember", upload.single("image"), async (req, res) => {
   try {
-    console.log("----- NEW SUBMISSION -----")
+    console.log("----- NEW SUBMISSION -----");
 
-    const name = req.body.name?.trim()
-    const email = req.body.email?.trim()
+    // 1. Get name, email, location
+    const name = req.body.name?.trim();
+    const email = req.body.email?.trim();
+    const location = req.body.location?.trim();
+    console.log("Incoming Neighbor:", {name, email, location});
 
-    if (!name || !email) {
-      console.log("Validation failed: missing name or email")
-      return res.status(400).json({ error: "Missing name or email" })
-    }
-
-    let imageUrl = null
-
-    /**
-     * ============================
-     * IMAGE PROCESSING (OPTIONAL)
-     * ============================
-     */
-
+    // 2. Get baby token
+    let imageUrl = null;
     if (req.file) {
+
+      // Log start
       console.log("Image received:", {
-        filename: req.file.originalname,
-        type: req.file.mimetype,
+        type: req.file.mimetype, 
         size: req.file.size,
-      })
+      });
 
       try {
-        // Convert uploaded image buffer to OpenAI file
+
+        /* -- Image Request 1: Convert Buffer to OpenAI file -- */
         const openaiFile = await toFile(
           req.file.buffer,
           req.file.originalname || "upload.png",
           { type: req.file.mimetype }
-        )
+        );
 
-        console.log("Sending image to OpenAI...")
+        /* -- Image Request 2: Get baby token from OpenAI -- */
+        const activity = req.body.activity?.trim();
+        const PROMPT = getPrompt(activity)
+
+        // Log Start 
+        console.log("Sending input to OpenAI.");
 
         const result = await openai.images.edit({
           model: process.env.OPENAI_IMAGE_MODEL,
           image: openaiFile,
-          prompt: PIXEL_PROMPT,
+          prompt: PROMPT,
           size: "1024x1024",
           background: "transparent",
-        })
+        });
 
-        console.log("OpenAI image generation completed")
+        // Log End 
+        console.log("Output received from OpenAI.");
 
-        const base64 = result.data?.[0]?.b64_json
-        if (!base64) {
-          throw new Error("OpenAI returned no image data")
-        }
+        /* -- Image Request 3: Store image in Supabase -- */ 
+        const base64 = result.data?.[0]?.b64_json;
+        if (!base64) {throw new Error("OpenAI returned no image data.")}
 
-        const buffer = Buffer.from(base64, "base64")
+        const buffer = Buffer.from(base64, "base64");
 
-        const filePath = `community/${Date.now()}-${name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")}.png`
+        const filePath = `community/${name.toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.png`;
 
-        console.log("Uploading image to Supabase:", filePath)
+        // Log start 
+        console.log("Uploading image to Supabase:", filePath);
 
         const { error: uploadError } = await supabase.storage
           .from("neighbors")
           .upload(filePath, buffer, {
-            contentType: "image/png",
-          })
+            contentType: "image/png"
+          });
 
-        if (uploadError) {
-          throw uploadError
-        }
+        if (uploadError) {throw uploadError}
 
         const { data } = supabase.storage
           .from("neighbors")
-          .getPublicUrl(filePath)
+          .getPublicUrl(filePath);
 
-        imageUrl = data.publicUrl
+        imageUrl = data.publicUrl;
 
-        console.log("Image successfully stored:", imageUrl)
+        // Log end 
+        console.log("Image successfully stored:", imageUrl);
 
       } catch (imageError) {
-        // IMPORTANT: image failure does NOT crash the whole request
-        console.error("Image processing failed:", imageError.message)
-        imageUrl = null
+        console.error("Image processing failed:", imageError.message);
+        imageUrl = null;
       }
 
     } else {
-      console.log("No image uploaded")
+      console.log("No image uploaded.");
     }
 
-    /**
-     * ============================
-     * DATABASE INSERT
-     * ============================
-     */
+    // 3. Insert neighbor profile in DB 
+    console.log("Inserting neighbor in DB.");
 
-    console.log("Saving user to database")
+    const { error: dbError } = await supabase.from("community_members")
+      .insert([{ name, email, image_url: imageUrl }]);
 
-    const { error: dbError } = await supabase
-      .from("community_members")
-      .insert([{ name, email, image_url: imageUrl }])
+    if (dbError) {throw dbError}
 
-    if (dbError) {
-      throw dbError
-    }
+    console.log("User saved successfully");
 
-    console.log("User saved successfully")
-    res.json({ ok: true })
+    // 4. Respond to the frontend 
+    res.json({ ok: true });
 
   } catch (err) {
-    console.error("Request failed:", err)
-    res.status(500).json({
-      error:'server error while processing submission',
-    })
+    console.error("[/submitMember]", err.message);
+    res.status(500).json({error:'Internal Server Error.'});
   }
 })
 
-/**
- * ======================================================
- * GET /community
- * ======================================================
- *
- * Returns all community members.
- * Used by:
- * - Framer Community page
- * - Future app
- */
-
+/* -- Set up GET /community endpoint -- */
 app.get("/community", async (req, res) => {
   const { data, error } = await supabase
     .from("community_members")
     .select("name,email,image_url,created_at")
-    .order("created_at", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Failed to fetch community:", error)
-    return res.status(500).json({ error: error.message })
+    console.error("Failed to fetch community:", error);
+    return res.status(500).json({ error: error.message });
   }
-
-  res.json(data)
+  res.json(data);
 })
 
-/**
- * ============================
- * HEALTH CHECK
- * ============================
- */
+/* -- Set up GET /health endpoint -- */
+app.get("/health", (_, res) => {res.json({ ok: true })});
 
-app.get("/health", (_, res) => {
-  res.json({ ok: true })
-})
-
-/**
- * ============================
- * START SERVER
- * ============================
- */
-
+/* -- Start Server -- */
 app.listen(process.env.PORT, () => {
-  console.log(`Server running on port ${process.env.PORT}`)
-})
+  console.log(`Server running on port ${process.env.PORT}`);
+});
