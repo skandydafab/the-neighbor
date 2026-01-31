@@ -37,13 +37,15 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
   try {
     console.log("----- NEW SUBMISSION -----");
 
-    // 1. Get name, email, location
+    // ---------------------------------
+    // Step 1. Get name, email, location
     const name = req.body.name?.trim();
     const email = req.body.email?.trim();
     const location = req.body.location?.trim();
     console.log("Incoming Neighbor:", {name, email, location});
 
-    // 2. Get baby token
+    // ----------------------
+    // Step 2. Get baby token
     let imageUrl = null;
     if (req.file) {
 
@@ -54,17 +56,17 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       });
 
       try {
-
+        // -------------------------------------------------------
         /* -- Image Request 1: Convert Buffer to OpenAI file -- */
         const openaiFile = await toFile(
           req.file.buffer,
           req.file.originalname || "upload.png",
           { type: req.file.mimetype }
         );
-
+        // ----------------------------------------------------
         /* -- Image Request 2: Get baby token from OpenAI -- */
         const activity = req.body.activity?.trim();
-        const PROMPT = getPrompt(activity)
+        const PROMPT = getPrompt(activity);
 
         // Log Start 
         console.log("Sending input to OpenAI.");
@@ -80,29 +82,38 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         // Log End 
         console.log("Output received from OpenAI.");
 
+        // -------------------------------------------------
         /* -- Image Request 3: Store image in Supabase -- */ 
+        
         const base64 = result.data?.[0]?.b64_json;
-        if (!base64) {throw new Error("OpenAI returned no image data.")}
+        
+        if (!base64) {
+          throw new Error(
+            "OpenAI returned no image data."
+          );
+        }
 
+        // Get buffer from OpenAI 
         const buffer = Buffer.from(base64, "base64");
 
-        const filePath = `community/${name.toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.png`;
+        // Create the filePath 
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const id = Math.random().toString(36).slice(2, 6);
+        const filePath = `community/${slug}-${id}.png`;
 
         // Log start 
-        console.log("Uploading image to Supabase:", filePath);
+        console.log("Uploading image in storage:", filePath);
 
         const { error: uploadError } = await supabase.storage
-          .from("neighbors")
-          .upload(filePath, buffer, {
-            contentType: "image/png"
-          });
+          .from("neighbors").upload(filePath, buffer, {contentType: "image/png"});
 
-        if (uploadError) {throw uploadError}
-
+        if (uploadError) {
+          throw uploadError
+        }
+        
+        // Get imageUrl 
         const { data } = supabase.storage
-          .from("neighbors")
-          .getPublicUrl(filePath);
+          .from("neighbors").getPublicUrl(filePath);
 
         imageUrl = data.publicUrl;
 
@@ -118,7 +129,8 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       console.log("No image uploaded.");
     }
 
-    // 3. Insert neighbor profile in DB 
+    // -------------------------------------
+    // Step 3. Insert neighbor profile in DB 
     console.log("Inserting neighbor in DB.");
 
     const { error: dbError } = await supabase.from("community_members")
@@ -128,8 +140,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     console.log("User saved successfully");
 
-    // 4. Respond to the frontend 
-    res.json({ ok: true });
+    // -------------------------------
+    // Step 4. Respond to the frontend 
+    res.json({ ok: true, imageUrl });
 
   } catch (err) {
     console.error("[/submitMember]", err.message);
