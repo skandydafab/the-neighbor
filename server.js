@@ -46,8 +46,11 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     // ----------------------
     // Step 2. Get baby token
+    let imageStatus = "none";
     let imageUrl = null;
+
     if (req.file) {
+      imageStatus = "processing";
 
       // Log start
       console.log("Image received:", {
@@ -116,12 +119,14 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           .from("neighbors").getPublicUrl(filePath);
 
         imageUrl = data.publicUrl;
+        imageStatus = "ready";
 
         // Log end 
         console.log("Image successfully stored:", imageUrl);
 
       } catch (imageError) {
         console.error("Image processing failed:", imageError.message);
+        imageStatus = "failed";
         imageUrl = null;
       }
 
@@ -142,7 +147,13 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     // -------------------------------
     // Step 4. Respond to the frontend 
-    res.json({ ok: true, imageUrl });
+    res.json({
+      ok: true,
+      image: {
+        status: imageStatus,
+        url: imageUrl,
+      }
+    });
 
   } catch (err) {
     console.error("[/submitMember]", err.message);
