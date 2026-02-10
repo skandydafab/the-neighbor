@@ -119,10 +119,10 @@ const supabase = createClient(
 function getPrompt(activity) {
   if (!activity) {
     return "Using the provided photo as reference, create an original baby character for the comic strip \
-  'Peanuts'. They are standing up, the background is white, and they should not have facial hair.";
+  'Peanuts'. They are standing up (from head to toe in frame), without background, and they should not have facial hair.";
   } else {
     return `Using the provided photo as reference, create an original baby character for the comic strip 'Peanuts'. They are \
-  standing up, the background is white, and they should not have facial hair. They are doing the following activity: ${activity}.`;
+  standing up (from head to toe in frame), with no background, and they should not have facial hair. They should clearly be doing the following activity: ${activity}.`;
   }
 }
 
@@ -243,7 +243,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           image: openaiFile,
           prompt: PROMPT,
           size: "1024x1024",
-          background: "transparent",
         })
 
         console.log("OpenAI image generation completed")
