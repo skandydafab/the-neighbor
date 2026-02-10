@@ -119,7 +119,7 @@ const supabase = createClient(
 function getPrompt(activity) {
   if (!activity) {
     return "Using the provided photo as reference, create an original baby character for the comic strip \
-  'Peanuts'. They are standing up (from head to toe in frame), transparent background, and they should not have facial hair. Leave clear margin around the character's silhouette (including top of hair and bottom of feet).";
+  'Peanuts'. They are standing up (from hair to toe in frame), no background, and they should not have facial hair. Leave clear margin around the character's silhouette, with at least 20 pixels from the highest-point of their hair, and 20 below the lowest point of their feet. Make sure that their skin color is solid";
   } else {
     console.log(activity + "activity being played and fed to GPT")
     return `Using the provided photo as reference, create an original baby character for the comic strip 'Peanuts'. They are \
@@ -244,6 +244,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           image: openaiFile,
           prompt: PROMPT,
           size: "1024x1024",
+          background: 'transparent',
         })
 
         console.log("OpenAI image generation completed")
