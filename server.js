@@ -130,9 +130,7 @@ function getPrompt(activity) {
 STYLE RULES:\
 - Solid opaque skin color\
 - Clean cartoon shading\
-- No facial hair\
-      
-      ";
+- No facial hair";
   } else {
     console.log(activity + "activity being played and fed to GPT")
     return `Using the provided photo as reference, create an original baby character for the comic strip 'Peanuts'. They are \
