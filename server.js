@@ -243,7 +243,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           model: process.env.OPENAI_IMAGE_MODEL,
           image: openaiFile,
           prompt: PROMPT,
-          size: "1536x1536",
+          size: "1024x1024",
         })
 
         console.log("OpenAI image generation completed")
