@@ -275,7 +275,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           model: process.env.OPENAI_IMAGE_MODEL,
           image: openaiFile,
           prompt: PROMPT,
-          size: "1024x1024",
+          size: "1024x1792",
           background: 'transparent',
         })
 
