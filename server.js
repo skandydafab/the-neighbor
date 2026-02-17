@@ -53,6 +53,7 @@ const cors = require("cors")                // Cross-origin requests
 const OpenAI = require("openai")            // OpenAI API client
 const { toFile } = require("openai")        // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
+const nodemailer = require("nodemailer")    // Email sending
 
 /**
  * ============================
@@ -111,6 +112,56 @@ const supabase = createClient(
 
 /**
  * ============================
+ * EMAIL TRANSPORTER (NODEMAILER)
+ * ============================
+ */
+
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtpout.secureserver.net",
+  port: process.env.SMTP_PORT || 465,
+  secure: true,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+})
+
+/**
+ * ============================
+ * SEND WELCOME EMAIL
+ * ============================
+ */
+
+async function sendWelcomeEmail(email, firstname) {
+  try {
+    await emailTransporter.sendMail({
+      from: `"The Neighbor" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Welcome to the Neighborhood!",
+      html: `
+        <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <h1 style="font-size: 28px;">Welcome, ${firstname}!</h1>
+          <p style="font-size: 16px; color: #333;">
+            We're thrilled to have you as our newest neighbor. 
+            Your profile has been added to our community wall.
+          </p>
+          <p style="font-size: 16px; color: #333;">
+            Stay tuned — your baby token is being generated and will appear on the wall soon!
+          </p>
+          <p style="font-size: 14px; color: #666; margin-top: 30px;">
+            — The Neighbor Team
+          </p>
+        </div>
+      `,
+    })
+    console.log("Welcome email sent to:", email)
+  } catch (err) {
+    console.error("Failed to send welcome email:", err.message)
+  }
+}
+
+/**
+ * ============================
  * IMAGE GENERATION PROMPT
  * ============================
  */
@@ -125,7 +176,7 @@ COMPOSITION RULES (CRITICAL):
 - Full body visible from hair to feet
 - Character appears small-to-medium scale in the canvas
 - Clear empty space above the head and below the feet
-- Do not zoom in
+- Draw clearly defined hair matching the style of the reference photo unless the subject in the reference photo is bald.
 - Do not crop any part of the character
 - Character centered with breathing room on all sides
 
@@ -347,7 +398,28 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
     }
 
     console.log("User saved successfully")
-    res.json({ ok: true })
+
+    const imageStatus = imageUrl
+      ? "success"
+      : req.file
+        ? "failed"
+        : "none"
+
+    await sendWelcomeEmail(email, firstname)
+
+    /**
+     * ============================
+     * Send imageURL back to front-end
+     * ============================
+     */
+
+    res.json({
+      ok: true,
+      image: {
+        status: imageStatus,
+        url: imageUrl || null,
+      },
+    })
 
   } catch (err) {
     console.error("Request failed:", err)
