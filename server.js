@@ -117,14 +117,17 @@ const supabase = createClient(
  */
 
 const emailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtpout.secureserver.net",
-  port: process.env.SMTP_PORT || 465,
-  secure: true,
+  host: "smtpout.secureserver.net",
+  port: 587,
+  secure: false,          // STARTTLS, not SSL
+  requireTLS: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-})
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+});
 
 /**
  * ============================
