@@ -144,11 +144,13 @@ Using the provided photo as reference, create an original baby character for the
 The character is clearly doing this activity:
 ${activity}
 
-COMPOSITION RULES:
-- Full body in frame
-- Leave visible margins around the character
-- Do not crop hair or feet
-- Centered composition
+COMPOSITION RULES (CRITICAL):
+- Full body visible from hair to feet
+- Character appears small-to-medium scale in the canvas
+- Clear empty space above the head and below the feet
+- Draw clearly defined hair matching the style of the reference photo unless the subject in the reference photo is bald.
+- Do not crop any part of the character
+- Character centered with breathing room on all sides
 
 STYLE RULES:
 - Solid opaque skin
