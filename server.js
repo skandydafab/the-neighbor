@@ -53,7 +53,6 @@ const cors = require("cors")                // Cross-origin requests
 const OpenAI = require("openai")            // OpenAI API client
 const { toFile } = require("openai")        // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
-const nodemailer = require("nodemailer")    // Email sending
 
 /**
  * ============================
@@ -109,59 +108,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
-
-/**
- * ============================
- * EMAIL TRANSPORTER (NODEMAILER)
- * ============================
- */
-
-const emailTransporter = nodemailer.createTransport({
-  host: "smtpout.secureserver.net",
-  port: 587,
-  secure: false,          // STARTTLS, not SSL
-  requireTLS: true,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-});
-
-/**
- * ============================
- * SEND WELCOME EMAIL
- * ============================
- */
-
-async function sendWelcomeEmail(email, firstname) {
-  try {
-    await emailTransporter.sendMail({
-      from: `"The Neighbor" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "Welcome to the Neighborhood!",
-      html: `
-        <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-          <h1 style="font-size: 28px;">Welcome, ${firstname}!</h1>
-          <p style="font-size: 16px; color: #333;">
-            We're thrilled to have you as our newest neighbor. 
-            Your profile has been added to our community wall.
-          </p>
-          <p style="font-size: 16px; color: #333;">
-            Stay tuned — your baby token is being generated and will appear on the wall soon!
-          </p>
-          <p style="font-size: 14px; color: #666; margin-top: 30px;">
-            — The Neighbor Team
-          </p>
-        </div>
-      `,
-    })
-    console.log("Welcome email sent to:", email)
-  } catch (err) {
-    console.error("Failed to send welcome email:", err.message)
-  }
-}
 
 /**
  * ============================
@@ -407,8 +353,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       : req.file
         ? "failed"
         : "none"
-
-    await sendWelcomeEmail(email, firstname)
 
     /**
      * ============================
