@@ -1,6 +1,6 @@
 /**
  * =========================================================
- * SERVER.JS — BACKEND (RENDER + OPENAI + SUPABASE)
+ * SERVER.JS — BACKEND (RENDER + OPENAI + SUPABASE + RESEND)
  * =========================================================
  *
  * This file is the SERVER-SIDE of the application.
@@ -17,11 +17,12 @@
  *                |
  *        [ THIS SERVER (Backend) ]
  *                |
- *        ┌───────────────┬────────────────┐
- *        |               |                |
- *   [ OpenAI API ]   [ Supabase DB ]   [ Supabase Storage ]
- *        |               |                |
- *   Image generation   User records    Generated images
+ *        ┌───────────────┬────────────────┬──────────────┐
+ *        |               |                |              |
+ *   [ OpenAI API ]   [ Supabase DB ]   [ Supabase    [ Resend ]
+ *        |               |              Storage ]        |
+ *   Image generation   User records       |        Welcome emails
+ *                                   Generated images
  *
  * WHAT THIS SERVER DOES
  * ---------------------
@@ -30,7 +31,24 @@
  *      - sends it to OpenAI to generate a new image
  *      - uploads the generated image to Supabase Storage
  * 3. Stores name, email, and image URL in Supabase Database
- * 4. Exposes an endpoint to fetch all community members
+ * 4. Sends a branded welcome email to the new member via Resend
+ * 5. Exposes an endpoint to fetch all community members
+ *
+ * EMAIL (RESEND)
+ * --------------
+ * We use Resend (https://resend.com) for transactional email.
+ * After a successful sign-up (database insert), the server sends
+ * a branded HTML welcome email to the new member's address.
+ *
+ * - Email sending is NON-FATAL: if it fails, the sign-up still
+ *   succeeds and the error is logged. The user is already saved.
+ * - The HTML template lives in getWelcomeEmailHtml() below.
+ *   Edit the copy variables at the top of that function to
+ *   change wording without touching the HTML layout.
+ * - Requires two env vars: RESEND_API_KEY and EMAIL_FROM.
+ * - Free tier: 100 emails/day, 3,000/month.
+ * - Custom sending domain must be verified in the Resend
+ *   dashboard (DNS records: SPF, DKIM, and a TXT verification).
  *
  * DEPLOYMENT NOTES (RENDER)
  * ------------------------
@@ -53,6 +71,7 @@ const cors = require("cors")                // Cross-origin requests
 const OpenAI = require("openai")            // OpenAI API client
 const { toFile } = require("openai")        // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
+const { Resend } = require("resend")                     // Transactional email
 
 /**
  * ============================
@@ -111,6 +130,20 @@ const supabase = createClient(
 
 /**
  * ============================
+ * RESEND EMAIL CLIENT
+ * ============================
+ *
+ * Sends transactional welcome emails after successful sign-up.
+ * Requires RESEND_API_KEY and EMAIL_FROM in .env.
+ * Get your API key at: https://resend.com/api-keys
+ * Verify your sending domain at: https://resend.com/domains
+ */
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
+
+/**
+ * ============================
  * IMAGE GENERATION PROMPT
  * ============================
  */
@@ -162,6 +195,75 @@ STYLE RULES:
 }
 
 /**
+ * ============================
+ * WELCOME EMAIL TEMPLATE
+ * ============================
+ *
+ * Branded HTML email sent after successful sign-up.
+ * Edit the copy below to change wording — the layout and
+ * styles are inline so they render in all email clients.
+ */
+
+function getWelcomeEmailHtml(firstname) {
+  // ── Editable copy ──────────────────────────────────────
+  const heading = `Welcome to the Neighborhood, ${firstname}!`
+  const bodyText = `
+    We are so happy to have you here. You are now officially
+    part of The Neighborhood — a growing community of creative,
+    kind, and curious people.
+  `
+  const ctaText = "Visit The Neighborhood"
+  const ctaUrl = process.env.CORS_ORIGIN || "https://theneighbor.com"
+  const signOff = "With love,"
+  const signOffName = "The Neighbor Team"
+  // ── End editable copy ──────────────────────────────────
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:Georgia,'Times New Roman',serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF5F2;padding:40px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border:1.5px solid rgba(0,0,0,0.08);border-radius:20px;overflow:hidden;">
+        <!-- Header band -->
+        <tr><td style="background-color:#FFE0E0;padding:32px 40px;text-align:center;">
+          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:Georgia,'Times New Roman',serif;">
+            ${heading}
+          </h1>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:32px 40px;">
+          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;">
+            ${bodyText.trim()}
+          </p>
+          <!-- CTA button -->
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+            <tr><td style="background-color:#FFE0E0;border:1.5px solid #1a1a1a;border-radius:12px;padding:12px 32px;text-align:center;">
+              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:Georgia,'Times New Roman',serif;">
+                ${ctaText}
+              </a>
+            </td></tr>
+          </table>
+          <!-- Sign-off -->
+          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;">
+            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
+          </p>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.06);">
+          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:monospace;">
+            You received this email because you signed up for The Neighborhood.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
+/**
  * ======================================================
  * POST /submitMember
  * ======================================================
@@ -197,6 +299,23 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       return res
         .status(400)
         .json({ error: "Missing firstname, lastname, or email" })
+    }
+
+    // Check for duplicate email before proceeding
+    const { data: existingMember, error: checkError } = await supabase
+      .from("community_members")
+      .select("email")
+      .eq("email", email)
+      .limit(1)
+
+    if (checkError) {
+      console.error("Email duplicate check failed:", checkError.message)
+      return res.status(500).json({ error: "Database error during email check" })
+    }
+
+    if (existingMember && existingMember.length > 0) {
+      console.log("Duplicate email rejected:", email)
+      return res.status(409).json({ error: "This email is already registered" })
     }
 
     console.log("Incoming Neighbor:", {
@@ -350,6 +469,33 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     console.log("User saved successfully")
 
+    /**
+     * ============================
+     * SEND WELCOME EMAIL
+     * ============================
+     *
+     * Non-fatal: if the email fails, we log the error but
+     * still return a successful response to the frontend.
+     * The user is already registered at this point.
+     */
+
+    try {
+      const { error: emailError } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to: email,
+        subject: "Welcome to The Neighborhood!",
+        html: getWelcomeEmailHtml(firstname),
+      })
+
+      if (emailError) {
+        console.error("Welcome email failed:", emailError.message)
+      } else {
+        console.log("Welcome email sent:", { email })
+      }
+    } catch (emailErr) {
+      console.error("Welcome email error:", emailErr.message)
+    }
+
     const imageStatus = imageUrl
       ? "success"
       : req.file
@@ -375,6 +521,52 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
     res.status(500).json({
       error:'server error while processing submission',
     })
+  }
+})
+
+/**
+ * ======================================================
+ * GET /check-email
+ * ======================================================
+ *
+ * Checks whether an email is already registered.
+ *
+ * Request: ?email=user@example.com (query parameter)
+ * Response:
+ *   200 { exists: true }  — email already registered
+ *   200 { exists: false } — email available
+ *   400 { error: "..." }  — missing parameter
+ */
+
+app.get("/check-email", async (req, res) => {
+  try {
+    const email = req.query.email?.trim()?.toLowerCase()
+
+    if (!email) {
+      return res.status(400).json({ error: "Email query parameter is required" })
+    }
+
+    console.log("Checking email:", email)
+
+    const { data, error } = await supabase
+      .from("community_members")
+      .select("email")
+      .eq("email", email)
+      .limit(1)
+
+    if (error) {
+      console.error("Email check query failed:", error.message)
+      return res.status(500).json({ error: "Database error" })
+    }
+
+    const exists = data && data.length > 0
+
+    console.log("Email check result:", { email, exists })
+
+    res.json({ exists })
+  } catch (err) {
+    console.error("Email check failed:", err.message)
+    res.status(500).json({ error: "Server error" })
   }
 })
 
