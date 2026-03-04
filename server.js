@@ -213,46 +213,70 @@ function getWelcomeEmailHtml(firstname) {
     kind, and curious people.
   `
   const ctaText = "Visit The Neighborhood"
-  const ctaUrl = process.env.CORS_ORIGIN || "https://theneighbor.com"
+  const ctaUrl = process.env.CORS_ORIGIN || "https://theneighborr.com"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
   // ── End editable copy ──────────────────────────────────
 
+  // ── Font URLs (hosted on Supabase Storage) ─────────────
+  const FONT_DAVINCI = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/davinci"
+  const FONT_GEIST   = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular"
+
   return `
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8" /></head>
-<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:Georgia,'Times New Roman',serif;">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    /* Custom fonts loaded from Supabase Storage (woff2).
+       Supported: Apple Mail, iOS Mail, Samsung Mail, Thunderbird.
+       Gmail & Outlook strip @font-face and fall back to the
+       web-safe fonts in each font-family stack. */
+    @font-face {
+      font-family: 'DaVinci';
+      src: url('${FONT_DAVINCI}') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'GeistMono';
+      src: url('${FONT_GEIST}') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:'GeistMono','Courier New',Courier,monospace;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF5F2;padding:40px 0;">
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border:1.5px solid rgba(0,0,0,0.08);border-radius:20px;overflow:hidden;">
         <!-- Header band -->
         <tr><td style="background-color:#FFE0E0;padding:32px 40px;text-align:center;">
-          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:Georgia,'Times New Roman',serif;">
+          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:'DaVinci',Georgia,'Times New Roman',serif;">
             ${heading}
           </h1>
         </td></tr>
         <!-- Body -->
         <tr><td style="padding:32px 40px;">
-          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;">
+          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;font-family:'GeistMono','Courier New',Courier,monospace;">
             ${bodyText.trim()}
           </p>
           <!-- CTA button -->
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
             <tr><td style="background-color:#FFE0E0;border:1.5px solid #1a1a1a;border-radius:12px;padding:12px 32px;text-align:center;">
-              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:Georgia,'Times New Roman',serif;">
+              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:'GeistMono','Courier New',Courier,monospace;">
                 ${ctaText}
               </a>
             </td></tr>
           </table>
           <!-- Sign-off -->
-          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;">
+          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;font-family:'GeistMono','Courier New',Courier,monospace;">
             ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
           </p>
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.06);">
-          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:monospace;">
+          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:'GeistMono','Courier New',Courier,monospace;">
             You received this email because you signed up for The Neighborhood.
           </p>
         </td></tr>
