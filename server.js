@@ -596,6 +596,47 @@ app.get("/check-email", async (req, res) => {
 
 /**
  * ======================================================
+ * POST /delete-member
+ * ======================================================
+ *
+ * Removes a community member by email.
+ */
+
+app.post("/delete-member", async (req, res) => {
+  try {
+    const email = req.body.email?.trim()?.toLowerCase()
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" })
+    }
+
+    console.log("Deleting member:", email)
+
+    const { data, error } = await supabase
+      .from("community_members")
+      .delete()
+      .eq("email", email)
+
+    if (error) {
+      console.error("Delete member failed:", error.message)
+      return res.status(500).json({ error: "Database error" })
+    }
+
+    if (!data || data.length === 0) {
+      console.log("No member found to delete for", email)
+      return res.status(404).json({ error: "Member not found" })
+    }
+
+    console.log("Member deleted:", email)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error("Delete member endpoint failed:", err.message)
+    res.status(500).json({ error: "Server error" })
+  }
+})
+
+/**
+ * ======================================================
  * GET /community
  * ======================================================
  *
