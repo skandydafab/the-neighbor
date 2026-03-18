@@ -29,9 +29,11 @@
  * 1. Receives form submissions from Framer (name, email, optional image)
  * 2. If an image is provided:
  *      - sends it to OpenAI to generate a new image
- *      - uploads the generated image to Supabase Storage
+ *      - converts the result to WebP via sharp (smaller file, faster loads)
+ *      - uploads the WebP to Supabase Storage
  * 3. Stores name, email, and image URL in Supabase Database
  * 4. Sends a branded welcome email to the new member via Resend
+ *    - if the member uploaded a photo, their baby token appears in the email
  * 5. Exposes an endpoint to fetch all community members
  *
  * EMAIL (RESEND)
@@ -43,12 +45,26 @@
  * - Email sending is NON-FATAL: if it fails, the sign-up still
  *   succeeds and the error is logged. The user is already saved.
  * - The HTML template lives in getWelcomeEmailHtml() below.
- *   Edit the copy variables at the top of that function to
- *   change wording without touching the HTML layout.
  * - Requires two env vars: RESEND_API_KEY and EMAIL_FROM.
  * - Free tier: 100 emails/day, 3,000/month.
  * - Custom sending domain must be verified in the Resend
  *   dashboard (DNS records: SPF, DKIM, and a TXT verification).
+ *
+ * IMAGE OPTIMISATION (SHARP + SUPABASE TRANSFORM)
+ * ------------------------------------------------
+ * Two-layer approach for fast image loads:
+ *
+ * 1. UPLOAD TIME — sharp converts the OpenAI PNG to WebP (quality 85)
+ *    before it ever hits Supabase Storage. Typical saving: 60–80% vs PNG.
+ *
+ * 2. SERVE TIME — getPublicUrl() uses Supabase's Image Transformation
+ *    API (Pro plan required) to resize on the fly to 200px wide.
+ *    Height auto-scales to preserve aspect ratio.
+ *    The result is cached at the CDN edge automatically.
+ *
+ *    NOTE: format is intentionally omitted from the transform options.
+ *    Passing format: "webp" caused Supabase to return a 400 error.
+ *    The file is already stored as WebP so no format conversion is needed.
  *
  * DEPLOYMENT NOTES (RENDER)
  * ------------------------
@@ -71,7 +87,8 @@ const cors = require("cors")                // Cross-origin requests
 const OpenAI = require("openai")            // OpenAI API client
 const { toFile } = require("openai")        // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
-const { Resend } = require("resend")                     // Transactional email
+const { Resend } = require("resend")        // Transactional email
+const sharp = require("sharp")              // Image conversion & resizing (WebP)
 
 /**
  * ============================
@@ -144,11 +161,54 @@ const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
 
 /**
  * ============================
+ * IMAGE TRANSFORM SETTINGS
+ * ============================
+ *
+ * TRANSFORM_W : width in px served to your site — height auto-scales.
+ * TRANSFORM_Q : quality for the CDN-served output (1–100).
+ * WEBP_QUALITY: WebP quality for the file stored in Supabase (1–100).
+ */
+
+const TRANSFORM_W  = 200  // serve at 200px wide, height auto-scales
+const TRANSFORM_Q  = 80   // quality of the CDN-served transformed image
+const WEBP_QUALITY = 85   // quality of the WebP file stored in Supabase
+
+/**
+ * ============================
+ * HELPER: getTransformedUrl
+ * ============================
+ *
+ * Wraps supabase.storage.getPublicUrl() with Supabase's Image
+ * Transformation options (Pro plan feature). Returns a clean
+ * /render/image/ CDN URL — no query string params appended.
+ *
+ * format is intentionally omitted: passing format: "webp" caused
+ * Supabase to reject the request with a 400 error. The stored file
+ * is already WebP so no conversion is needed at serve time.
+ *
+ * @param {string} filePath  - path inside the bucket, e.g. "community/123-john-doe.webp"
+ * @returns {string}         - transformed public URL
+ */
+
+function getTransformedUrl(filePath) {
+  const { data } = supabase.storage
+    .from("neighbors")
+    .getPublicUrl(filePath, {
+      transform: {
+        width:   TRANSFORM_W,
+        quality: TRANSFORM_Q,
+        // format omitted — causes 400 from Supabase, file is already WebP
+      },
+    })
+  return data.publicUrl
+}
+
+/**
+ * ============================
  * IMAGE GENERATION PROMPT
  * ============================
  */
 
-// Prompt function 
 function getPrompt(activity) {
   if (!activity) {
     return `
@@ -167,9 +227,9 @@ STYLE RULES:
 - Clean cartoon shading
 - No facial hair
 - No background
-`;
+`
   } else {
-    console.log(activity + " activity being played and fed to GPT");
+    console.log(activity + " activity being played and fed to GPT")
 
     return `
 Using the provided photo as reference, create an original baby character for the comic strip "Peanuts".
@@ -190,7 +250,7 @@ STYLE RULES:
 - Clean cartoon shading
 - No facial hair
 - No background
-`;
+`
   }
 }
 
@@ -199,39 +259,44 @@ STYLE RULES:
  * WELCOME EMAIL TEMPLATE
  * ============================
  *
- * Branded HTML email sent after successful sign-up.
- * Edit the copy below to change wording — the layout and
- * styles are inline so they render in all email clients.
+ * Sends a branded welcome email after successful sign-up.
+ *
+ * @param {string}      firstname  — the new member's first name
+ * @param {string|null} imageUrl   — public URL of the AI-generated baby token,
+ *                                   or null if the user did not upload a selfie.
+ *                                   When provided, the baby token is rendered
+ *                                   between the two body paragraphs at 68px wide.
  */
 
-function getWelcomeEmailHtml(firstname) {
-  // ── Editable copy ──────────────────────────────────────
-  const heading = `Welcome to the Neighborhood, ${firstname}!`
-  const bodyText = `
-    We are so happy to have you here. You are now officially
-    part of The Neighborhood — a growing community of creative,
-    kind, and curious people.
-  `
-  const ctaText = "Visit The Neighborhood"
-  const ctaUrl = process.env.CORS_ORIGIN || "https://theneighborr.com"
-  const signOff = "With love,"
-  const signOffName = "The Neighbor Team"
-  // ── End editable copy ──────────────────────────────────
+function getWelcomeEmailHtml(firstname, imageUrl = null) {
 
-  // ── Font URLs (hosted on Supabase Storage) ─────────────
   const FONT_DAVINCI = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/davinci"
   const FONT_GEIST   = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular"
+  const ctaUrl       = process.env.CORS_ORIGIN || "https://theneighborr.com"
 
-  return `
-<!DOCTYPE html>
+  // Rendered only when the user generated a baby token
+  const babyTokenBlock = imageUrl
+    ? `<img
+        src="${imageUrl}"
+        alt="Your Baby Token"
+        width="68"
+        style="
+          display: block;
+          width: 68px;
+          height: auto;
+          background: transparent;
+          margin: 0 0 22px 0;
+        "
+      />`
+    : ""
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to The Neighbor Magazine!</title>
   <style>
-    /* Custom fonts loaded from Supabase Storage (woff2).
-       Supported: Apple Mail, iOS Mail, Samsung Mail, Thunderbird.
-       Gmail & Outlook strip @font-face and fall back to the
-       web-safe fonts in each font-family stack. */
     @font-face {
       font-family: 'DaVinci';
       src: url('${FONT_DAVINCI}') format('woff2');
@@ -244,45 +309,116 @@ function getWelcomeEmailHtml(firstname) {
       font-weight: normal;
       font-style: normal;
     }
+
+    /* =============================================
+       PADDING CONTROL — edit this one value only
+       ============================================= */
+    :root {
+      --email-padding: 32px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #FFFFF2;
+      font-family: 'GeistMono', 'Courier New', Courier, monospace;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    .email-outer {
+      width: 100%;
+      background-color: #FFFFF2;
+      padding: var(--email-padding);
+    }
+
+    .wrapper {
+      max-width: 560px;
+    }
+
+    .greeting {
+      font-family: 'DaVinci', Georgia, 'Times New Roman', serif;
+      font-size: 28px;
+      line-height: 1.25;
+      color: #1a1a1a;
+      font-weight: normal;
+      margin-bottom: 28px;
+    }
+
+    .body-text {
+      font-family: 'GeistMono', 'Courier New', Courier, monospace;
+      font-size: 14px;
+      line-height: 1.80;
+      color: #3a3a3a;
+      margin-bottom: 22px;
+    }
+
+    .cta {
+      display: inline-block;
+      margin: 8px 0 16px;
+      font-family: 'GeistMono', 'Courier New', Courier, monospace;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-decoration: underline;
+      letter-spacing: 0.04em;
+    }
+
+    .footer {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(0,0,0,0.5);
+    }
+
+    .footer-legal {
+      font-family: 'GeistMono', 'Courier New', Courier, monospace;
+      font-size: 10px;
+      color: black;
+    }
+
+    @media only screen and (max-width: 480px) {
+      .greeting { font-size: 23px; }
+      .body-text { font-size: 13px; }
+    }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:'GeistMono','Courier New',Courier,monospace;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF5F2;padding:40px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border:1.5px solid rgba(0,0,0,0.08);border-radius:20px;overflow:hidden;">
-        <!-- Header band -->
-        <tr><td style="background-color:#FFE0E0;padding:32px 40px;text-align:center;">
-          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:'DaVinci',Georgia,'Times New Roman',serif;">
-            ${heading}
-          </h1>
-        </td></tr>
-        <!-- Body -->
-        <tr><td style="padding:32px 40px;">
-          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;font-family:'GeistMono','Courier New',Courier,monospace;">
-            ${bodyText.trim()}
-          </p>
-          <!-- CTA button -->
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-            <tr><td style="background-color:#FFE0E0;border:1.5px solid #1a1a1a;border-radius:12px;padding:12px 32px;text-align:center;">
-              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:'GeistMono','Courier New',Courier,monospace;">
-                ${ctaText}
-              </a>
-            </td></tr>
-          </table>
-          <!-- Sign-off -->
-          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;font-family:'GeistMono','Courier New',Courier,monospace;">
-            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
-          </p>
-        </td></tr>
-        <!-- Footer -->
-        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.06);">
-          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:'GeistMono','Courier New',Courier,monospace;">
-            You received this email because you signed up for The Neighborhood.
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
+<body>
+  <div class="email-outer">
+    <div class="wrapper">
+
+      <h1 class="greeting">Welcome to the Neighbor Magazine, ${firstname} !</h1>
+
+      <p class="body-text">
+        We are so happy to have you here. You are now officially part of
+        The Neighborhood, a growing community of creative and
+        curious people. We hope you will enjoy our collection.
+      </p>
+
+      ${babyTokenBlock}
+
+      <p class="body-text">
+        Every once in a while, you will receive our newsletter
+        from the playground, The Local Lunatic, so keep an eye
+        on your inbox. You can say hello to your new friends here:
+      </p>
+
+      <a href="${ctaUrl}" class="cta">
+        Visit The Neighborhood
+      </a>
+
+      <p class="body-text">
+        With love,<br>Ska &amp; Paul
+      </p>
+
+      <div class="footer">
+        <p class="footer-legal">
+          You received this because you signed up for The Neighborhood.
+        </p>
+      </div>
+
+    </div>
+  </div>
 </body>
 </html>`
 }
@@ -304,8 +440,11 @@ function getWelcomeEmailHtml(firstname) {
  * 1. Validate firstname + lastname + email
  * 2. If image exists:
  *    - Generate image via OpenAI
- *    - Upload generated image to Supabase Storage
+ *    - Convert PNG buffer to WebP via sharp
+ *    - Upload WebP to Supabase Storage
+ *    - Return a Supabase transform URL (resized on CDN, cached)
  * 3. Save user record to Supabase Database
+ * 4. Send welcome email — includes baby token image if one was generated
  */
 
 app.post("/submitMember", upload.single("image"), async (req, res) => {
@@ -313,16 +452,14 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
     console.log("----- NEW SUBMISSION -----")
 
     const firstname = req.body.firstname?.trim()
-    const lastname = req.body.lastname?.trim()
-    const email = req.body.email?.trim()
-    const location = req.body.location?.trim() || null
-    const activity = req.body.activity?.trim() || null
+    const lastname  = req.body.lastname?.trim()
+    const email     = req.body.email?.trim()
+    const location  = req.body.location?.trim() || null
+    const activity  = req.body.activity?.trim() || null
 
     if (!firstname || !lastname || !email) {
       console.log("Validation failed: missing firstname, lastname, or email")
-      return res
-        .status(400)
-        .json({ error: "Missing firstname, lastname, or email" })
+      return res.status(400).json({ error: "Missing firstname, lastname, or email" })
     }
 
     // Check for duplicate email before proceeding
@@ -342,15 +479,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       return res.status(409).json({ error: "This email is already registered" })
     }
 
-    console.log("Incoming Neighbor:", {
-      firstname,
-      lastname,
-      email,
-      location,
-      activity,
-    })
+    console.log("Incoming Neighbor:", { firstname, lastname, email, location, activity })
 
-    let imageUrl = null
+    let imageUrl         = null
     let originalImageUrl = null
 
     /**
@@ -362,8 +493,8 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
     if (req.file) {
       console.log("Image received:", {
         filename: req.file.originalname,
-        type: req.file.mimetype,
-        size: req.file.size,
+        type:     req.file.mimetype,
+        size:     req.file.size,
       })
 
       try {
@@ -372,9 +503,8 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
          * STORE ORIGINAL IMAGE
          * ============================
          *
-         * We first store the original uploaded image in the
-         * "original_image_url" folder within the same Supabase
-         * bucket as the "community" folder.
+         * Store the raw upload in original_image_url/ as a permanent
+         * backup before we do any processing.
          */
 
         const safeNameSlug = `${firstname}-${lastname}`
@@ -392,10 +522,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           })
 
         if (originalUploadError) {
-          console.error(
-            "Original image upload failed:",
-            originalUploadError.message
-          )
+          console.error("Original image upload failed:", originalUploadError.message)
         } else {
           const { data: originalData } = supabase.storage
             .from("neighbors")
@@ -417,10 +544,10 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         const PROMPT = getPrompt(activity)
 
         const result = await openai.images.edit({
-          model: process.env.OPENAI_IMAGE_MODEL,
-          image: openaiFile,
-          prompt: PROMPT,
-          size: "1024x1536",
+          model:      process.env.OPENAI_IMAGE_MODEL,
+          image:      openaiFile,
+          prompt:     PROMPT,
+          size:       "1024x1536",
           background: "transparent",
         })
 
@@ -431,29 +558,38 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           throw new Error("OpenAI returned no image data")
         }
 
-        const buffer = Buffer.from(base64, "base64")
+        // OpenAI returns a PNG buffer. Convert it to WebP before uploading.
+        // This reduces file size by ~60-80%, meaning faster loads and less egress.
+        const pngBuffer = Buffer.from(base64, "base64")
+        console.log("Converting OpenAI PNG to WebP via sharp...")
+        const webpBuffer = await sharp(pngBuffer)
+          .webp({ quality: WEBP_QUALITY })
+          .toBuffer()
+        console.log(`WebP conversion complete — PNG: ${pngBuffer.length} bytes → WebP: ${webpBuffer.length} bytes`)
 
-        const filePath = `community/${Date.now()}-${safeNameSlug}.png`
+        // File is now .webp — use that extension so Content-Type is correct
+        const filePath = `community/${Date.now()}-${safeNameSlug}.webp`
 
-        console.log("Uploading image to Supabase:", filePath)
+        console.log("Uploading WebP image to Supabase:", filePath)
 
         const { error: uploadError } = await supabase.storage
           .from("neighbors")
-          .upload(filePath, buffer, {
-            contentType: "image/png",
+          .upload(filePath, webpBuffer, {
+            contentType:  "image/webp",
+            // Cache this image at the CDN edge for 1 year.
+            // Community member images never change after upload, so this is safe.
+            cacheControl: "31536000",
           })
 
         if (uploadError) {
           throw uploadError
         }
 
-        const { data } = supabase.storage
-          .from("neighbors")
-          .getPublicUrl(filePath)
+        // Return a Supabase Image Transform URL — 200px wide, height auto-scales.
+        // Supabase resizes on the first request then serves from CDN cache forever.
+        imageUrl = getTransformedUrl(filePath)
 
-        imageUrl = data.publicUrl
-
-        console.log("Image successfully stored:", imageUrl)
+        console.log("Image successfully stored and transform URL generated:", imageUrl)
 
       } catch (imageError) {
         // IMPORTANT: image failure does NOT crash the whole request
@@ -475,17 +611,15 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     const { error: dbError } = await supabase
       .from("community_members")
-      .insert([
-        {
-          firstname,
-          lastname,
-          email,
-          location,
-          activity,
-          image_url: imageUrl,
-          original_image_url: originalImageUrl,
-        },
-      ])
+      .insert([{
+        firstname,
+        lastname,
+        email,
+        location,
+        activity,
+        image_url:          imageUrl,
+        original_image_url: originalImageUrl,
+      }])
 
     if (dbError) {
       throw dbError
@@ -501,14 +635,18 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
      * Non-fatal: if the email fails, we log the error but
      * still return a successful response to the frontend.
      * The user is already registered at this point.
+     *
+     * imageUrl is passed so the baby token appears in the email
+     * when the member uploaded a photo. If no photo was uploaded,
+     * imageUrl is null and the token block is simply omitted.
      */
 
     try {
       const { error: emailError } = await resend.emails.send({
-        from: EMAIL_FROM,
-        to: email,
+        from:    EMAIL_FROM,
+        to:      email,
         subject: "Welcome to The Neighborhood!",
-        html: getWelcomeEmailHtml(firstname),
+        html:    getWelcomeEmailHtml(firstname, imageUrl),
       })
 
       if (emailError) {
@@ -536,15 +674,13 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
       ok: true,
       image: {
         status: imageStatus,
-        url: imageUrl || null,
+        url:    imageUrl || null,
       },
     })
 
   } catch (err) {
     console.error("Request failed:", err)
-    res.status(500).json({
-      error:'server error while processing submission',
-    })
+    res.status(500).json({ error: "server error while processing submission" })
   }
 })
 
