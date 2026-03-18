@@ -96,12 +96,7 @@ const supabase = createClient(
 function getTransformedUrl(filePath) {
   const { data } = supabase.storage
     .from("neighbors")
-    .getPublicUrl(filePath, {
-      transform: {
-        width: TRANSFORM_W,
-        quality: TRANSFORM_Q,
-      },
-    })
+    .getPublicUrl(filePath)
   return data.publicUrl
 }
 

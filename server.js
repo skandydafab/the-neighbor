@@ -50,22 +50,12 @@
  * - Custom sending domain must be verified in the Resend
  *   dashboard (DNS records: SPF, DKIM, and a TXT verification).
  *
- * IMAGE OPTIMISATION (SHARP + SUPABASE TRANSFORM)
- * ------------------------------------------------
- * Two-layer approach for fast image loads:
- *
- * 1. UPLOAD TIME — sharp converts the OpenAI PNG to WebP (quality 85)
- *    before it ever hits Supabase Storage. Typical saving: 60–80% vs PNG.
- *
- * 2. SERVE TIME — getPublicUrl() uses Supabase's Image Transformation
- *    API (Pro plan required) to resize on the fly to 200px wide.
- *    Height auto-scales to preserve aspect ratio.
- *    The result is cached at the CDN edge automatically.
- *
- *    NOTE: format is intentionally omitted from the transform options.
- *    Passing format: "webp" caused Supabase to return a 400 error.
- *    The file is already stored as WebP so no format conversion is needed.
- *
+ * IMAGE OPTIMISATION (SHARP + PUBLIC URL)
+ * ----------------------------------------
+ * The OpenAI PNG is converted to WebP (quality 85) via sharp before upload.
+ * We then expose the raw public URL of the WebP file so the link ends in
+ * `.webp` with no Supabase render/query-string extras.
+
  * DEPLOYMENT NOTES (RENDER)
  * ------------------------
  * - Render free instances have limited CPU
@@ -161,45 +151,31 @@ const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
 
 /**
  * ============================
- * IMAGE TRANSFORM SETTINGS
+ * IMAGE OPTIMISATION
  * ============================
  *
- * TRANSFORM_W : width in px served to your site — height auto-scales.
- * TRANSFORM_Q : quality for the CDN-served output (1–100).
- * WEBP_QUALITY: WebP quality for the file stored in Supabase (1–100).
+ * sharp converts the OpenAI PNG into WebP (quality 85) before upload.
  */
 
-const TRANSFORM_W  = 200  // serve at 200px wide, height auto-scales
-const TRANSFORM_Q  = 80   // quality of the CDN-served transformed image
-const WEBP_QUALITY = 85   // quality of the WebP file stored in Supabase
+const WEBP_QUALITY = 85
 
 /**
  * ============================
- * HELPER: getTransformedUrl
+ * HELPER: getPublicWebpUrl
  * ============================
  *
- * Wraps supabase.storage.getPublicUrl() with Supabase's Image
- * Transformation options (Pro plan feature). Returns a clean
- * /render/image/ CDN URL — no query string params appended.
- *
- * format is intentionally omitted: passing format: "webp" caused
- * Supabase to reject the request with a 400 error. The stored file
- * is already WebP so no conversion is needed at serve time.
+ * Returns the plain Supabase public URL for the uploaded `.webp` file.
+ * There is no `/render/image/` segment or query string — the link ends
+ * directly with `.webp`.
  *
  * @param {string} filePath  - path inside the bucket, e.g. "community/123-john-doe.webp"
- * @returns {string}         - transformed public URL
+ * @returns {string}         - public URL
  */
 
 function getTransformedUrl(filePath) {
   const { data } = supabase.storage
     .from("neighbors")
-    .getPublicUrl(filePath, {
-      transform: {
-        width:   TRANSFORM_W,
-        quality: TRANSFORM_Q,
-        // format omitted — causes 400 from Supabase, file is already WebP
-      },
-    })
+    .getPublicUrl(filePath)
   return data.publicUrl
 }
 
