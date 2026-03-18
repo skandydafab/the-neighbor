@@ -244,34 +244,26 @@ STYLE RULES:
  *                                   between the two body paragraphs at 68px wide.
  */
 
-function getWelcomeEmailHtml(firstname, imageUrl = null) {
+function getWelcomeEmailHtml(firstname) {
+  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
+  const bodyText = `
+    We are so happy to have you here. You are now officially
+    part of The Neighborhood — a growing community of creative,
+    kind, and curious people.
+  `
+  const ctaText = "Visit The Neighborhood"
+  const ctaUrl = "https://theneighborr.com/neighborhood/en"
+  const signOff = "With love,"
+  const signOffName = "The Neighbor Team"
 
-  const FONT_DAVINCI = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/davinci"
-  const FONT_GEIST   = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular"
-  const ctaUrl       = process.env.CORS_ORIGIN || "https://theneighborr.com"
-
-  // Rendered only when the user generated a baby token
-  const babyTokenBlock = imageUrl
-    ? `<img
-        src="${imageUrl}"
-        alt="Your Baby Token"
-        width="68"
-        style="
-          display: block;
-          width: 68px;
-          height: auto;
-          background: transparent;
-          margin: 0 0 22px 0;
-        "
-      />`
-    : ""
+  const FONT_DAVINCI = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/davinci.woff2"
+  const FONT_GEIST   = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to The Neighbor Magazine!</title>
+  <title>Welcome to the Neighbor Magazine!</title>
   <style>
     @font-face {
       font-family: 'DaVinci';
@@ -285,116 +277,40 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
       font-weight: normal;
       font-style: normal;
     }
-
-    /* =============================================
-       PADDING CONTROL — edit this one value only
-       ============================================= */
-    :root {
-      --email-padding: 32px;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      background-color: #FFFFF2;
-      font-family: 'GeistMono', 'Courier New', Courier, monospace;
-      -webkit-text-size-adjust: 100%;
-      -ms-text-size-adjust: 100%;
-    }
-
-    .email-outer {
-      width: 100%;
-      background-color: #FFFFF2;
-      padding: var(--email-padding);
-    }
-
-    .wrapper {
-      max-width: 560px;
-    }
-
-    .greeting {
-      font-family: 'DaVinci', Georgia, 'Times New Roman', serif;
-      font-size: 28px;
-      line-height: 1.25;
-      color: #1a1a1a;
-      font-weight: normal;
-      margin-bottom: 28px;
-    }
-
-    .body-text {
-      font-family: 'GeistMono', 'Courier New', Courier, monospace;
-      font-size: 14px;
-      line-height: 1.80;
-      color: #3a3a3a;
-      margin-bottom: 22px;
-    }
-
-    .cta {
-      display: inline-block;
-      margin: 8px 0 16px;
-      font-family: 'GeistMono', 'Courier New', Courier, monospace;
-      font-size: 13px;
-      color: #1a1a1a;
-      text-decoration: underline;
-      letter-spacing: 0.04em;
-    }
-
-    .footer {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid rgba(0,0,0,0.5);
-    }
-
-    .footer-legal {
-      font-family: 'GeistMono', 'Courier New', Courier, monospace;
-      font-size: 10px;
-      color: black;
-    }
-
-    @media only screen and (max-width: 480px) {
-      .greeting { font-size: 23px; }
-      .body-text { font-size: 13px; }
-    }
   </style>
 </head>
-<body>
-  <div class="email-outer">
-    <div class="wrapper">
-
-      <h1 class="greeting">Welcome to the Neighbor Magazine, ${firstname} !</h1>
-
-      <p class="body-text">
-        We are so happy to have you here. You are now officially part of
-        The Neighborhood, a growing community of creative and
-        curious people. We hope you will enjoy our collection.
-      </p>
-
-      ${babyTokenBlock}
-
-      <p class="body-text">
-        Every once in a while, you will receive our newsletter
-        from the playground, The Local Lunatic, so keep an eye
-        on your inbox. You can say hello to your new friends here:
-      </p>
-
-      <a href="${ctaUrl}" class="cta">
-        Visit The Neighborhood
-      </a>
-
-      <p class="body-text">
-        With love,<br>Ska &amp; Paul
-      </p>
-
-      <div class="footer">
-        <p class="footer-legal">
-          You received this because you signed up for The Neighborhood.
-        </p>
-      </div>
-
-    </div>
-  </div>
+<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:'GeistMono','Courier New',Courier,monospace;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF5F2;padding:40px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border:1.5px solid rgba(0,0,0,0.08);border-radius:20px;overflow:hidden;">
+        <tr><td style="background-color:#FFE0E0;padding:32px 40px;text-align:center;">
+          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:'DaVinci',Georgia,'Times New Roman',serif;">
+            ${heading}
+          </h1>
+        </td></tr>
+        <tr><td style="padding:32px 40px;">
+          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;font-family:'GeistMono','Courier New',Courier,monospace;">
+            ${bodyText.trim()}
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+            <tr><td style="background-color:#FFE0E0;border:1.5px solid #1a1a1a;border-radius:12px;padding:12px 32px;text-align:center;">
+              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:'GeistMono','Courier New',Courier,monospace;">
+                ${ctaText}
+              </a>
+            </td></tr>
+          </table>
+          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;font-family:'GeistMono','Courier New',Courier,monospace;">
+            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.06);">
+          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:'GeistMono','Courier New',Courier,monospace;">
+            You received this email because you signed up for The Neighborhood.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
 </body>
 </html>`
 }
@@ -622,7 +538,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         from:    EMAIL_FROM,
         to:      email,
         subject: "Welcome to The Neighborhood!",
-        html:    getWelcomeEmailHtml(firstname, imageUrl),
+        html:    getWelcomeEmailHtml(firstname),
       })
 
       if (emailError) {
