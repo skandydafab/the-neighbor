@@ -244,69 +244,50 @@ STYLE RULES:
  *                                   between the two body paragraphs at 68px wide.
  */
 
-function getWelcomeEmailHtml(firstname) {
-  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
+function getWelcomeEmailHtml(firstname, imageUrl = null) {
   const bodyText = `
-    We are so happy to have you here. You are now officially
-    part of The Neighborhood — a growing community of creative,
-    kind, and curious people.
+    We are happy to have you here. You are now officially
+    part of The Neighborhood, a growing community of creative,
+    kind, and curious people. We hope you will enjoy our collection.
   `
+  const bodyTextContinuation = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. You can say hello to your new friends here:"
   const ctaText = "Visit The Neighborhood"
   const ctaUrl = "https://theneighborr.com/neighborhood/en"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
 
-  const FONT_DAVINCI = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/davinci.woff2"
-  const FONT_GEIST   = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
+  const babyTokenParagraph = imageUrl
+    ? `<p style="margin:14px 0 12px;font-size:16px;line-height:24px;color:#3a3a3a;">Here is your baby token:</p>
+      <p style="margin:0 0 18px;"><img src="${imageUrl}" alt="Baby token" width="180" style="width:180px;height:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.08);" /></p>`
+    : ""
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Welcome to the Neighbor Magazine!</title>
-  <style>
-    @font-face {
-      font-family: 'DaVinci';
-      src: url('${FONT_DAVINCI}') format('woff2');
-      font-weight: normal;
-      font-style: normal;
-    }
-    @font-face {
-      font-family: 'GeistMono';
-      src: url('${FONT_GEIST}') format('woff2');
-      font-weight: normal;
-      font-style: normal;
-    }
-  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#FBF5F2;font-family:'GeistMono','Courier New',Courier,monospace;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF5F2;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:#ffffff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:32px 0;">
     <tr><td align="center">
-      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border:1.5px solid rgba(0,0,0,0.08);border-radius:20px;overflow:hidden;">
-        <tr><td style="background-color:#FFE0E0;padding:32px 40px;text-align:center;">
-          <h1 style="margin:0;font-size:26px;line-height:32px;color:#1a1a1a;font-family:'DaVinci',Georgia,'Times New Roman',serif;">
-            ${heading}
-          </h1>
-        </td></tr>
-        <tr><td style="padding:32px 40px;">
-          <p style="margin:0 0 20px;font-size:16px;line-height:26px;color:#3a3a3a;font-family:'GeistMono','Courier New',Courier,monospace;">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);">
+        <tr><td style="padding:30px 40px;">
+          <p style="margin:0 0 16px;font-size:16px;line-height:26px;">
             ${bodyText.trim()}
           </p>
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-            <tr><td style="background-color:#FFE0E0;border:1.5px solid #1a1a1a;border-radius:12px;padding:12px 32px;text-align:center;">
-              <a href="${ctaUrl}" style="font-size:15px;color:#1a1a1a;text-decoration:none;font-family:'GeistMono','Courier New',Courier,monospace;">
-                ${ctaText}
-              </a>
-            </td></tr>
-          </table>
-          <p style="margin:28px 0 0;font-size:15px;line-height:24px;color:#6a6a6a;font-family:'GeistMono','Courier New',Courier,monospace;">
-            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
+          ${imageUrl ? babyTokenParagraph : ""}
+          <p style="margin:0 0 4px;font-size:16px;line-height:26px;">
+            ${bodyTextContinuation}
+          </p>
+          <p style="margin:0 0 24px;font-size:16px;line-height:26px;">
+            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:underline;">${ctaText}</a>
+          </p>
+          <p style="margin:0;font-size:16px;line-height:26px;color:#3a3a3a;">
+            ${signOff}<br/><strong>${signOffName}</strong>
           </p>
         </td></tr>
-        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.06);">
-          <p style="margin:0;font-size:11px;color:rgba(0,0,0,0.35);font-family:'GeistMono','Courier New',Courier,monospace;">
-            You received this email because you signed up for The Neighborhood.
-          </p>
+        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.08);font-size:12px;color:#6a6a6a;">
+          You received this email because you signed up for The Neighborhood.
         </td></tr>
       </table>
     </td></tr>
@@ -534,11 +515,12 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
      */
 
     try {
+      const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
       const { error: emailError } = await resend.emails.send({
         from:    EMAIL_FROM,
         to:      email,
-        subject: "Welcome to The Neighborhood!",
-        html:    getWelcomeEmailHtml(firstname),
+        subject: welcomeSubject,
+        html:    getWelcomeEmailHtml(firstname, imageUrl),
       })
 
       if (emailError) {
