@@ -245,7 +245,7 @@ STYLE RULES:
  */
 
 function getWelcomeEmailHtml(firstname, imageUrl = null) {
-  const FONT_GEIST = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
+  const FONT_ROBOTO_IMPORT = "https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap"
   const bodyText = `
     We are happy to have you here. You are now officially
     part of The Neighborhood, a growing community of creative,
@@ -271,24 +271,18 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome to the Neighbor Magazine!</title>
   <style>
-    @font-face {
-      font-family: "Geist Mono";
-      src: url('${FONT_GEIST}') format("woff2");
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
+    @import url('${FONT_ROBOTO_IMPORT}');
     body {
-      font-family: "Geist Mono", "Courier New", monospace;
+      font-family: "Roboto Mono", "Courier New", monospace;
       color: #1a1a1a;
-      background-color: #fffaf6;
+      background-color: #ffffff;
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#fffaf6;">
+<body style="margin:0;padding:0;background-color:#ffffff;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fffaf6;padding:40px 0;">
     <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#fffff2;border:1px solid rgba(255,94,150,0.35);border-radius:32px;box-shadow:0 24px 60px rgba(255,94,150,0.25);">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#fffff2;border:1px solid rgba(0, 0, 0, 0.35);border-radius:32px;box-shadow:0 24px 60px rgba(0, 0, 0, 0.25);">
         <tr><td style="padding:38px 44px 28px;">
           <p style="margin:0 0 14px;font-size:16px;line-height:26px;">
             ${bodyText.trim()}
@@ -308,7 +302,7 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
             ${signOff}<br/><strong>${signOffName}</strong>
           </p>
         </td></tr>
-        <tr><td style="padding:16px 44px;text-align:center;border-top:1px dashed rgba(255,94,150,0.35);font-size:12px;color:#6a6a6a;">
+        <tr><td style="padding:16px 44px;text-align:center;border-top:1px dashed rgba(0, 0, 0, 0.35);font-size:12px;color:#6a6a6a;">
           You received this email because you signed up for The Neighborhood.
         </td></tr>
       </table>
@@ -378,6 +372,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     let imageUrl         = null
     let originalImageUrl = null
+    let welcomeEmailImageSrc = null
 
     /**
      * ============================
@@ -452,6 +447,8 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         if (!base64) {
           throw new Error("OpenAI returned no image data")
         }
+
+        welcomeEmailImageSrc = `data:image/png;base64,${base64}`
 
         // OpenAI returns a PNG buffer. Convert it to WebP before uploading.
         // This reduces file size by ~60-80%, meaning faster loads and less egress.
@@ -538,11 +535,12 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     try {
       const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
+      const emailImageSrc = welcomeEmailImageSrc || imageUrl
       const { error: emailError } = await resend.emails.send({
         from:    EMAIL_FROM,
         to:      email,
         subject: welcomeSubject,
-        html:    getWelcomeEmailHtml(firstname, imageUrl),
+        html:    getWelcomeEmailHtml(firstname, emailImageSrc),
       })
 
       if (emailError) {
