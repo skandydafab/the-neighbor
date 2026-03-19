@@ -54,8 +54,7 @@
  * ----------------------------------------
  * The OpenAI PNG is converted to WebP (quality 85) via sharp before upload.
  * We then expose the raw public URL of the WebP file so the link ends in
- * `.webp` with no Supabase render/query-string extras.
-
+ * `.webp` with no Supabase render/query-string extras. 
  * DEPLOYMENT NOTES (RENDER)
  * ------------------------
  * - Render free instances have limited CPU
@@ -70,22 +69,20 @@ require("dotenv").config()
  * IMPORT DEPENDENCIES
  * ============================
  */
-
 const express = require("express")          // Web server framework
-const multer = require("multer")            // Handles file uploads
-const cors = require("cors")                // Cross-origin requests
-const OpenAI = require("openai")            // OpenAI API client
+const multer  = require("multer")            // Handles file uploads
+const cors    = require("cors")              // Cross-origin requests
+const OpenAI  = require("openai")            // OpenAI API client
 const { toFile } = require("openai")        // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
 const { Resend } = require("resend")        // Transactional email
-const sharp = require("sharp")              // Image conversion & resizing (WebP)
+const sharp   = require("sharp")             // Image conversion & resizing (WebP)
 
 /**
  * ============================
  * SERVER INITIALIZATION
  * ============================
  */
-
 const app = express()
 
 // Multer with in-memory storage (files available as req.file.buffer)
@@ -102,7 +99,6 @@ app.use(express.json())
  * Controls which frontend origins may call this server.
  * Example: https://your-site.framer.website
  */
-
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN,
@@ -114,7 +110,6 @@ app.use(
  * OPENAI CLIENT
  * ============================
  */
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
@@ -129,7 +124,6 @@ const openai = new OpenAI({
  * - bypasses Row Level Security
  * - NEVER expose this key to frontend
  */
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -145,8 +139,7 @@ const supabase = createClient(
  * Get your API key at: https://resend.com/api-keys
  * Verify your sending domain at: https://resend.com/domains
  */
-
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend   = new Resend(process.env.RESEND_API_KEY)
 const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
 
 /**
@@ -156,7 +149,6 @@ const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
  *
  * sharp converts the OpenAI PNG into WebP (quality 85) before upload.
  */
-
 const WEBP_QUALITY = 85
 
 /**
@@ -171,7 +163,6 @@ const WEBP_QUALITY = 85
  * @param {string} filePath  - path inside the bucket, e.g. "community/123-john-doe.webp"
  * @returns {string}         - public URL
  */
-
 function getTransformedUrl(filePath) {
   const { data } = supabase.storage
     .from("neighbors")
@@ -184,7 +175,6 @@ function getTransformedUrl(filePath) {
  * IMAGE GENERATION PROMPT
  * ============================
  */
-
 function getPrompt(activity) {
   if (!activity) {
     return `
@@ -210,8 +200,7 @@ STYLE RULES:
     return `
 Using the provided photo as reference, create an original baby character for the comic strip "Peanuts".
 
-The character is clearly doing this activity:
-${activity}
+The character is clearly doing this activity: ${activity}
 
 COMPOSITION RULES (CRITICAL):
 - Full body visible from hair to feet
@@ -238,26 +227,23 @@ STYLE RULES:
  * Sends a branded welcome email after successful sign-up.
  *
  * @param {string}      firstname  — the new member's first name
- * @param {string|null} imageSrc   — AI-generated Baby token URL (WebP) rendered
- *                                   inside the email. When absent, the block is omitted.
+ * @param {string|null} imageSrc   — Email-ready PNG URL/data URI for the baby token.
+ *                                   When absent, the block is omitted.
  */
-
 function getWelcomeEmailHtml(firstname, imageSrc = null) {
-  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
-  const bodyText = `We are so happy to have you here. You are now officially part of The Neighborhood — a growing community of creative, kind, and curious people.`
+  const heading      = `Welcome to the Neighbor Magazine, ${firstname}!`
+  const bodyText     = `We are so happy to have you here. You are now officially part of The Neighborhood — a growing community of creative, kind, and curious people.`
   const bodyContinue = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. Say hello to your new friends here:"
-  const ctaText = "Visit The Neighborhood"
-  const ctaUrl = "https://theneighborr.com/neighborhood/en"
-  const signOff = "With love,"
-  const signOffName = "The Neighbor Team"
+  const ctaText      = "Visit The Neighborhood"
+  const ctaUrl       = "https://theneighborr.com/neighborhood/en"
+  const signOff      = "With love,"
+  const signOffName  = "The Neighbor Team"
 
   const babyTokenSection = imageSrc
     ? `<tr>
-        <td align="center" style="padding:0 24px 16px;">
-          <div style="padding:20px;background:#ffffff;border-radius:28px;box-shadow:0 18px 45px rgba(0,0,0,0.12);">
-            <p style="margin:0 0 12px;font-size:16px;line-height:24px;color:#3a3a3a;font-family:'Roboto',sans-serif;">Here is your baby token:</p>
-            <img src="${imageSrc}" alt="Baby token" width="200" style="width:200px;height:auto;border-radius:18px;border:1px solid rgba(0,0,0,0.08);background:#fff;display:block;margin:0 auto;" />
-          </div>
+        <td align="center" style="padding: 8px 48px 32px;">
+          <p style="margin: 0 0 14px; font-size: 15px; line-height: 24px; color: #888888; font-family: 'Roboto', sans-serif; text-align: center; letter-spacing: 0.02em; text-transform: uppercase; font-weight: 500;">Your baby token</p>
+          <img src="${imageSrc}" alt="Baby token" width="180" style="width: 180px; height: auto; border-radius: 16px; display: block; margin: 0 auto;" />
         </td>
       </tr>`
     : ""
@@ -272,26 +258,59 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#ffffff;font-family:'Roboto','Helvetica Neue',sans-serif;color:#1a1a1a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #f5f5f0; font-family: 'Roboto', 'Helvetica Neue', sans-serif; color: #1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f0; padding: 48px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFF2;border-radius:34px;border:1px solid rgba(0,0,0,0.18);box-shadow:0 24px 50px rgba(0,0,0,0.12);">
-        <tr><td style="padding:42px 48px 32px;text-align:left;">
-          <p style="margin:0 0 20px;font-size:28px;line-height:36px;font-weight:700;display:inline-flex;align-items:center;color:#1a1a1a;">${heading}</p>
-          <div style="width:72px;height:4px;background:#ffbcd1;border-radius:999px;margin:18px 0;"></div>
-          <p style="margin:0 0 18px;font-size:17px;line-height:28px;color:#2b2b2b;">${bodyText}</p>
-          ${babyTokenSection}
-          <p style="margin:0 0 4px;font-size:16px;line-height:26px;color:#2b2b2b;">${bodyContinue}</p>
-          <p style="margin:0 0 26px;font-size:16px;line-height:26px;color:#2b2b2b;">
-            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:none;font-weight:600;border-bottom:3px solid #1a1a1a;padding-bottom:3px;">${ctaText}</a>
-          </p>
-          <p style="margin:0;font-size:16px;line-height:26px;color:#3a3a3a;">
-            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
-          </p>
-        </td></tr>
-        <tr><td style="padding:18px 48px 26px;text-align:center;border-top:1px dashed rgba(0,0,0,0.2);font-size:12px;color:#5a5a5a;">
-          You received this email because you signed up for The Neighborhood.
-        </td></tr>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 40px rgba(0,0,0,0.08);">
+
+        <!-- Header band -->
+        <tr>
+          <td style="background: #1a1a1a; padding: 36px 48px 32px; text-align: left;">
+            <p style="margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ffbcd1; font-family: 'Roboto', sans-serif;">The Neighbor Magazine</p>
+          </td>
+        </tr>
+
+        <!-- Main content -->
+        <tr>
+          <td style="padding: 40px 48px 16px; text-align: left;">
+            <p style="margin: 0 0 20px; font-size: 26px; line-height: 34px; font-weight: 700; color: #1a1a1a; font-family: 'Roboto', sans-serif;">${heading}</p>
+            <p style="margin: 0; font-size: 16px; line-height: 27px; color: #444444; font-family: 'Roboto', sans-serif;">${bodyText}</p>
+          </td>
+        </tr>
+
+        <!-- Baby token (conditional) -->
+        ${babyTokenSection}
+
+        <!-- Body continuation -->
+        <tr>
+          <td style="padding: ${imageSrc ? "0" : "24px"} 48px 12px;">
+            <p style="margin: 0 0 6px; font-size: 16px; line-height: 27px; color: #444444; font-family: 'Roboto', sans-serif;">${bodyContinue}</p>
+          </td>
+        </tr>
+
+        <!-- CTA -->
+        <tr>
+          <td style="padding: 4px 48px 36px;">
+            <a href="${ctaUrl}" style="display: inline-block; font-size: 15px; font-weight: 600; color: #ffffff; background: #1a1a1a; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-family: 'Roboto', sans-serif;">${ctaText}</a>
+          </td>
+        </tr>
+
+        <!-- Sign off -->
+        <tr>
+          <td style="padding: 0 48px 40px;">
+            <p style="margin: 0; font-size: 15px; line-height: 26px; color: #444444; font-family: 'Roboto', sans-serif;">
+              ${signOff}<br/><strong style="color: #1a1a1a;">${signOffName}</strong>
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding: 20px 48px; background: #f5f5f0; border-top: 1px solid #ebebeb; text-align: center; font-size: 12px; color: #999999; font-family: 'Roboto', sans-serif; border-radius: 0 0 24px 24px;">
+            You received this email because you signed up for The Neighborhood.
+          </td>
+        </tr>
+
       </table>
     </td></tr>
   </table>
@@ -322,7 +341,6 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
  * 3. Save user record to Supabase Database
  * 4. Send welcome email — includes baby token image if one was generated
  */
-
 app.post("/submitMember", upload.single("image"), async (req, res) => {
   try {
     console.log("----- NEW SUBMISSION -----")
@@ -357,8 +375,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     console.log("Incoming Neighbor:", { firstname, lastname, email, location, activity })
 
-    let imageUrl         = null
-    let originalImageUrl = null
+    let imageUrl             = null
+    let originalImageUrl     = null
+    let welcomeEmailImageSrc = null
 
     /**
      * ============================
@@ -443,6 +462,15 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           .toBuffer()
         console.log(`WebP conversion complete — PNG: ${pngBuffer.length} bytes → WebP: ${webpBuffer.length} bytes`)
 
+        // Flatten transparency onto white before encoding for email.
+        // Email clients do not support alpha channels — transparent areas
+        // would render as black without this step.
+        const emailPngBuffer = await sharp(webpBuffer)
+          .flatten({ background: { r: 255, g: 255, b: 255 } })
+          .png()
+          .toBuffer()
+        welcomeEmailImageSrc = `data:image/png;base64,${emailPngBuffer.toString("base64")}`
+
         // File is now .webp — use that extension so Content-Type is correct
         const filePath = `community/${Date.now()}-${safeNameSlug}.webp`
 
@@ -512,18 +540,19 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
      * still return a successful response to the frontend.
      * The user is already registered at this point.
      *
-     * imageUrl is passed so the baby token appears in the email
-     * when the member uploaded a photo. If no photo was uploaded,
-     * imageUrl is null and the token block is simply omitted.
+     * The reconverted PNG is used for the email (keeps transparency) while
+     * the stored imageUrl remains WebP for the database. If no photo was
+     * uploaded, the block is omitted entirely.
      */
 
     try {
       const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
+      const emailImageSrc  = welcomeEmailImageSrc || imageUrl
       const { error: emailError } = await resend.emails.send({
         from:    EMAIL_FROM,
         to:      email,
         subject: welcomeSubject,
-        html:    getWelcomeEmailHtml(firstname, imageUrl),
+        html:    getWelcomeEmailHtml(firstname, emailImageSrc),
       })
 
       if (emailError) {
@@ -574,7 +603,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
  *   200 { exists: false } — email available
  *   400 { error: "..." }  — missing parameter
  */
-
 app.get("/check-email", async (req, res) => {
   try {
     const email = req.query.email?.trim()?.toLowerCase()
@@ -614,7 +642,6 @@ app.get("/check-email", async (req, res) => {
  *
  * Removes a community member by email.
  */
-
 app.post("/delete-member", async (req, res) => {
   try {
     const email = req.body.email?.trim()?.toLowerCase()
@@ -658,7 +685,6 @@ app.post("/delete-member", async (req, res) => {
  * - Framer Community page
  * - Future app
  */
-
 app.get("/community", async (req, res) => {
   const { data, error } = await supabase
     .from("community_members")
@@ -680,7 +706,6 @@ app.get("/community", async (req, res) => {
  * HEALTH CHECK
  * ============================
  */
-
 app.get("/health", (_, res) => {
   res.json({ ok: true })
 })
@@ -690,7 +715,6 @@ app.get("/health", (_, res) => {
  * START SERVER
  * ============================
  */
-
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`)
 })
