@@ -31,7 +31,7 @@
  *      - sends it to OpenAI to generate a new image
  *      - converts the result to WebP via sharp (smaller file, faster loads)
  *      - uploads the WebP to Supabase Storage
- *      - also uploads a white-background PNG to Supabase for use in email
+ *      - also uploads a #FFFFF2-background PNG to Supabase for use in email
  * 3. Stores name, email, and image URL in Supabase Database
  * 4. Sends a branded welcome email to the new member via Resend
  *    - if the member uploaded a photo, their baby token appears in the email
@@ -57,13 +57,16 @@
  *
  *   1. original_image_url/  — raw user upload (backup, never touched again)
  *   2. community/           — WebP (quality 85) — used on the website
- *   3. email/               — PNG with white background — used in the email
+ *   3. email/               — PNG flattened onto #FFFFF2 — used in the email
  *
  * Email clients (Gmail, Outlook, Apple Mail) do not support transparency.
  * Transparent pixels are rendered as black or stripped entirely. The only
  * reliable fix is to flatten the alpha channel onto a solid colour before
- * the image is used in email. We use white (#FFFFF2) because the email
- * card background is also white, so it looks seamless.
+ * the image is used in email.
+ *
+ * We flatten onto #FFFFF2 (r:255, g:255, b:242) — the same colour as the
+ * email card background — so the image blends in seamlessly with no visible
+ * box or border around it.
  *
  * The email version is uploaded to Supabase as a real public URL — NOT
  * embedded as a base64 data URI. Many email clients silently drop inline
@@ -186,6 +189,19 @@ const WEBP_QUALITY = 85
 
 /**
  * ============================
+ * EMAIL FLATTEN BACKGROUND
+ * ============================
+ *
+ * The background colour used when flattening the transparent baby token PNG
+ * for email. Must exactly match the email card background (#FFFFF2) so the
+ * image blends in seamlessly — no white box, no visible border.
+ *
+ * #FFFFF2 = rgb(255, 255, 242)
+ */
+const EMAIL_FLATTEN_BG = { r: 255, g: 255, b: 242 }
+
+/**
+ * ============================
  * HELPER: getPublicUrl
  * ============================
  *
@@ -259,17 +275,18 @@ STYLE RULES:
  * Sends a branded welcome email after successful sign-up.
  *
  * DESIGN NOTES:
- * - Background: #FFFFF2 (warm off-white), matches the card
- * - Card: white (#FFFFF2) with a light border, rounded corners
+ * - Outer background: #ffffff (white)
+ * - Card background: #FFFFF2 (warm off-white) — matches the flattened image bg
  * - Title font: Playfair Display (serif, imported via Google Fonts)
  * - Body font: Roboto (sans-serif, imported via Google Fonts)
  * - No decorative dividers or coloured header bands
  * - All content centred
- * - Baby token image displayed without a box/shadow — just the image
+ * - Baby token image blends seamlessly — no visible box because the image
+ *   flatten bg (#FFFFF2) matches the card bg (#FFFFF2) exactly
  * - CTA is a clean dark pill button, centred
  *
  * @param {string}      firstname  — the new member's first name
- * @param {string|null} imageSrc   — Public URL of the white-background PNG.
+ * @param {string|null} imageSrc   — Public URL of the #FFFFF2-background PNG.
  *                                   Must be a real https:// URL — NOT a data URI.
  *                                   When absent, the token block is omitted.
  */
@@ -285,8 +302,8 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
   const babyTokenSection = imageSrc
     ? `<tr>
         <td align="center" style="padding: 12px 48px 36px;">
-          <p style="margin: 0 0 16px; font-size: 13px; line-height: 20px; color: #aaaaaa; font-family: 'Roboto', sans-serif; text-align: center; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;">Your baby token</p>
-          <img src="${imageSrc}" alt="Your baby token" width="200" style="width: 200px; height: auto; display: block; margin: 0 auto; border-radius: 12px;" />
+          <p style="margin: 0 0 16px; font-size: 12px; line-height: 20px; color: #aaaaaa; font-family: 'Roboto', sans-serif; text-align: center; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;">Your baby token</p>
+          <img src="${imageSrc}" alt="Your baby token" width="220" style="width: 220px; height: auto; display: block; margin: 0 auto;" />
         </td>
       </tr>`
     : ""
@@ -301,13 +318,13 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap');
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #FFFFFF; font-family: 'Roboto', 'Helvetica Neue', sans-serif; color: #1a1a1a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #FFFFF2; padding: 48px 16px;">
+<body style="margin: 0; padding: 0; background-color: #ffffff; font-family: 'Roboto', 'Helvetica Neue', sans-serif; color: #1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; padding: 48px 16px;">
     <tr>
       <td align="center">
 
-        <!-- Outer card -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background: #FFFFF2; border-radius: 20px; border: 1px solid #e8e8e0; overflow: hidden;">
+        <!-- Outer card — background #FFFFF2, light border -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background: #FFFFF2; border-radius: 20px; border: 1px solid #e8e8d8; overflow: hidden;">
 
           <!-- Top padding -->
           <tr><td style="height: 52px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
@@ -326,7 +343,9 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
             </td>
           </tr>
 
-          <!-- Baby token (conditional) -->
+          <!-- Baby token (conditional).
+               No border-radius or background on the img tag — the image
+               is already flattened onto #FFFFF2 so it blends into the card. -->
           ${babyTokenSection}
 
           <!-- Body continuation -->
@@ -355,7 +374,7 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
 
           <!-- Footer -->
           <tr>
-            <td align="center" style="padding: 20px 48px; border-top: 1px solid #f0f0e8; background: #FFFFF2; font-size: 11px; line-height: 18px; color: #bbbbaa; font-family: 'Roboto', sans-serif; text-align: center;">
+            <td align="center" style="padding: 20px 48px; border-top: 1px solid #e8e8d8; font-size: 11px; line-height: 18px; color: #bbbbaa; font-family: 'Roboto', sans-serif; text-align: center;">
               You received this email because you signed up for The Neighborhood.
             </td>
           </tr>
@@ -388,7 +407,7 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
  * 2. If image exists:
  *    - Generate image via OpenAI
  *    - Convert PNG buffer to WebP via sharp → upload to community/
- *    - Flatten PNG onto white background → upload to email/
+ *    - Flatten PNG onto #FFFFF2 background → upload to email/
  *    - Return the community/ WebP public URL for the database
  * 3. Save user record to Supabase Database
  * 4. Send welcome email — uses the email/ PNG URL if available
@@ -429,7 +448,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     let imageUrl             = null   // WebP URL stored in DB and shown on site
     let originalImageUrl     = null   // Raw upload backup
-    let welcomeEmailImageSrc = null   // White-background PNG URL used in email
+    let welcomeEmailImageSrc = null   // #FFFFF2-background PNG URL used in email
 
     /**
      * ============================
@@ -519,7 +538,12 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
          * are either shown as black or stripped entirely.
          *
          * Fix: use sharp's .flatten() to composite the alpha channel onto
-         * a solid white background (#FFFFF2) before encoding as PNG.
+         * EMAIL_FLATTEN_BG (#FFFFF2, rgb 255/255/242) before encoding as PNG.
+         *
+         * Critically, this colour exactly matches the email card background.
+         * This means the image has no visible box or border around it —
+         * it simply appears to float on the card.
+         *
          * .flatten() is the correct sharp method — it merges the alpha
          * channel onto the colour. The .png({ background: ... }) option
          * only sets metadata and does NOT fill transparency.
@@ -534,9 +558,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
          * See deployment notes at the top of this file for the exact SQL.
          */
 
-        console.log("Creating white-background PNG for email...")
+        console.log("Creating #FFFFF2-background PNG for email...")
         const emailPngBuffer = await sharp(webpBuffer)
-          .flatten({ background: { r: 255, g: 255, b: 255 } })
+          .flatten({ background: EMAIL_FLATTEN_BG })
           .png()
           .toBuffer()
         console.log(`Email PNG created — size: ${emailPngBuffer.length} bytes`)
@@ -634,7 +658,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
      * still return a successful response to the frontend.
      * The user is already registered at this point.
      *
-     * welcomeEmailImageSrc is the hosted white-background PNG URL.
+     * welcomeEmailImageSrc is the hosted #FFFFF2-background PNG URL.
      * If the email upload failed, we pass null so the token block
      * is cleanly omitted rather than showing a broken image.
      * If no photo was uploaded at all, the block is also omitted.
