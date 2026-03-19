@@ -31,6 +31,7 @@
  *      - sends it to OpenAI to generate a new image
  *      - converts the result to WebP via sharp (smaller file, faster loads)
  *      - uploads the WebP to Supabase Storage
+ *      - also uploads a white-background PNG to Supabase for use in email
  * 3. Stores name, email, and image URL in Supabase Database
  * 4. Sends a branded welcome email to the new member via Resend
  *    - if the member uploaded a photo, their baby token appears in the email
@@ -50,11 +51,43 @@
  * - Custom sending domain must be verified in the Resend
  *   dashboard (DNS records: SPF, DKIM, and a TXT verification).
  *
- * IMAGE OPTIMISATION (SHARP + PUBLIC URL)
+ * IMAGE PIPELINE
  * ----------------------------------------
- * The OpenAI PNG is converted to WebP (quality 85) via sharp before upload.
- * We then expose the raw public URL of the WebP file so the link ends in
- * `.webp` with no Supabase render/query-string extras. 
+ * Three versions of every image are produced and stored:
+ *
+ *   1. original_image_url/  — raw user upload (backup, never touched again)
+ *   2. community/           — WebP (quality 85) — used on the website
+ *   3. email/               — PNG with white background — used in the email
+ *
+ * Email clients (Gmail, Outlook, Apple Mail) do not support transparency.
+ * Transparent pixels are rendered as black or stripped entirely. The only
+ * reliable fix is to flatten the alpha channel onto a solid colour before
+ * the image is used in email. We use white (#FFFFF2) because the email
+ * card background is also white, so it looks seamless.
+ *
+ * The email version is uploaded to Supabase as a real public URL — NOT
+ * embedded as a base64 data URI. Many email clients silently drop inline
+ * base64 images above ~100 KB. Hosting the image as a URL has no such limit.
+ *
+ * SUPABASE STORAGE REQUIREMENTS
+ * ----------------------------------------
+ * The `neighbors` bucket must have three publicly readable folders:
+ *   - original_image_url/
+ *   - community/
+ *   - email/              ← required for email images to load
+ *
+ * To make the email/ folder public in Supabase:
+ *   SQL Editor → New query → run:
+ *
+ *   CREATE POLICY "Public read email folder"
+ *   ON storage.objects
+ *   FOR SELECT
+ *   TO anon
+ *   USING (
+ *     bucket_id = 'neighbors'
+ *     AND (storage.foldername(name))[1] = 'email'
+ *   );
+ *
  * DEPLOYMENT NOTES (RENDER)
  * ------------------------
  * - Render free instances have limited CPU
@@ -69,14 +102,14 @@ require("dotenv").config()
  * IMPORT DEPENDENCIES
  * ============================
  */
-const express = require("express")          // Web server framework
-const multer  = require("multer")            // Handles file uploads
-const cors    = require("cors")              // Cross-origin requests
-const OpenAI  = require("openai")            // OpenAI API client
-const { toFile } = require("openai")        // Converts buffers to files
+const express          = require("express")          // Web server framework
+const multer           = require("multer")           // Handles file uploads
+const cors             = require("cors")             // Cross-origin requests
+const OpenAI           = require("openai")           // OpenAI API client
+const { toFile }       = require("openai")           // Converts buffers to files
 const { createClient } = require("@supabase/supabase-js") // Supabase client
-const { Resend } = require("resend")        // Transactional email
-const sharp   = require("sharp")             // Image conversion & resizing (WebP)
+const { Resend }       = require("resend")           // Transactional email
+const sharp            = require("sharp")            // Image conversion & resizing (WebP)
 
 /**
  * ============================
@@ -139,7 +172,7 @@ const supabase = createClient(
  * Get your API key at: https://resend.com/api-keys
  * Verify your sending domain at: https://resend.com/domains
  */
-const resend   = new Resend(process.env.RESEND_API_KEY)
+const resend     = new Resend(process.env.RESEND_API_KEY)
 const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev"
 
 /**
@@ -153,17 +186,16 @@ const WEBP_QUALITY = 85
 
 /**
  * ============================
- * HELPER: getPublicWebpUrl
+ * HELPER: getPublicUrl
  * ============================
  *
- * Returns the plain Supabase public URL for the uploaded `.webp` file.
- * There is no `/render/image/` segment or query string — the link ends
- * directly with `.webp`.
+ * Returns the plain Supabase public URL for any uploaded file.
+ * There is no `/render/image/` segment or query string.
  *
  * @param {string} filePath  - path inside the bucket, e.g. "community/123-john-doe.webp"
  * @returns {string}         - public URL
  */
-function getTransformedUrl(filePath) {
+function getPublicUrl(filePath) {
   const { data } = supabase.storage
     .from("neighbors")
     .getPublicUrl(filePath)
@@ -226,14 +258,25 @@ STYLE RULES:
  *
  * Sends a branded welcome email after successful sign-up.
  *
+ * DESIGN NOTES:
+ * - Background: #FFFFF2 (warm off-white), matches the card
+ * - Card: white (#FFFFF2) with a light border, rounded corners
+ * - Title font: Playfair Display (serif, imported via Google Fonts)
+ * - Body font: Roboto (sans-serif, imported via Google Fonts)
+ * - No decorative dividers or coloured header bands
+ * - All content centred
+ * - Baby token image displayed without a box/shadow — just the image
+ * - CTA is a clean dark pill button, centred
+ *
  * @param {string}      firstname  — the new member's first name
- * @param {string|null} imageSrc   — Email-ready PNG URL/data URI for the baby token.
- *                                   When absent, the block is omitted.
+ * @param {string|null} imageSrc   — Public URL of the white-background PNG.
+ *                                   Must be a real https:// URL — NOT a data URI.
+ *                                   When absent, the token block is omitted.
  */
 function getWelcomeEmailHtml(firstname, imageSrc = null) {
-  const heading      = `Welcome to the Neighbor Magazine, ${firstname}!`
+  const heading      = `Welcome to the Neighborhood, ${firstname}!`
   const bodyText     = `We are so happy to have you here. You are now officially part of The Neighborhood — a growing community of creative, kind, and curious people.`
-  const bodyContinue = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. Say hello to your new friends here:"
+  const bodyContinue = `Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. Say hello to your new friends here:`
   const ctaText      = "Visit The Neighborhood"
   const ctaUrl       = "https://theneighborr.com/neighborhood/en"
   const signOff      = "With love,"
@@ -241,9 +284,9 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
 
   const babyTokenSection = imageSrc
     ? `<tr>
-        <td align="center" style="padding: 8px 48px 32px;">
-          <p style="margin: 0 0 14px; font-size: 15px; line-height: 24px; color: #888888; font-family: 'Roboto', sans-serif; text-align: center; letter-spacing: 0.02em; text-transform: uppercase; font-weight: 500;">Your baby token</p>
-          <img src="${imageSrc}" alt="Baby token" width="180" style="width: 180px; height: auto; border-radius: 16px; display: block; margin: 0 auto;" />
+        <td align="center" style="padding: 12px 48px 36px;">
+          <p style="margin: 0 0 16px; font-size: 13px; line-height: 20px; color: #aaaaaa; font-family: 'Roboto', sans-serif; text-align: center; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;">Your baby token</p>
+          <img src="${imageSrc}" alt="Your baby token" width="200" style="width: 200px; height: auto; display: block; margin: 0 auto; border-radius: 12px;" />
         </td>
       </tr>`
     : ""
@@ -253,66 +296,75 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to the Neighbor Magazine!</title>
+  <title>Welcome to the Neighborhood!</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap');
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f0; font-family: 'Roboto', 'Helvetica Neue', sans-serif; color: #1a1a1a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f0; padding: 48px 16px;">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 40px rgba(0,0,0,0.08);">
+<body style="margin: 0; padding: 0; background-color: #FFFFFF; font-family: 'Roboto', 'Helvetica Neue', sans-serif; color: #1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #FFFFF2; padding: 48px 16px;">
+    <tr>
+      <td align="center">
 
-        <!-- Header band -->
-        <tr>
-          <td style="background: #1a1a1a; padding: 36px 48px 32px; text-align: left;">
-            <p style="margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ffbcd1; font-family: 'Roboto', sans-serif;">The Neighbor Magazine</p>
-          </td>
-        </tr>
+        <!-- Outer card -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background: #FFFFF2; border-radius: 20px; border: 1px solid #e8e8e0; overflow: hidden;">
 
-        <!-- Main content -->
-        <tr>
-          <td style="padding: 40px 48px 16px; text-align: left;">
-            <p style="margin: 0 0 20px; font-size: 26px; line-height: 34px; font-weight: 700; color: #1a1a1a; font-family: 'Roboto', sans-serif;">${heading}</p>
-            <p style="margin: 0; font-size: 16px; line-height: 27px; color: #444444; font-family: 'Roboto', sans-serif;">${bodyText}</p>
-          </td>
-        </tr>
+          <!-- Top padding -->
+          <tr><td style="height: 52px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
 
-        <!-- Baby token (conditional) -->
-        ${babyTokenSection}
+          <!-- Heading -->
+          <tr>
+            <td align="center" style="padding: 0 48px 28px;">
+              <h1 style="margin: 0; font-family: 'Playfair Display', Georgia, serif; font-size: 30px; line-height: 40px; font-weight: 700; color: #1a1a1a; text-align: center;">${heading}</h1>
+            </td>
+          </tr>
 
-        <!-- Body continuation -->
-        <tr>
-          <td style="padding: ${imageSrc ? "0" : "24px"} 48px 12px;">
-            <p style="margin: 0 0 6px; font-size: 16px; line-height: 27px; color: #444444; font-family: 'Roboto', sans-serif;">${bodyContinue}</p>
-          </td>
-        </tr>
+          <!-- Body text -->
+          <tr>
+            <td align="center" style="padding: 0 52px ${imageSrc ? "32px" : "28px"};">
+              <p style="margin: 0; font-size: 16px; line-height: 28px; color: #555555; font-family: 'Roboto', sans-serif; text-align: center;">${bodyText}</p>
+            </td>
+          </tr>
 
-        <!-- CTA -->
-        <tr>
-          <td style="padding: 4px 48px 36px;">
-            <a href="${ctaUrl}" style="display: inline-block; font-size: 15px; font-weight: 600; color: #ffffff; background: #1a1a1a; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-family: 'Roboto', sans-serif;">${ctaText}</a>
-          </td>
-        </tr>
+          <!-- Baby token (conditional) -->
+          ${babyTokenSection}
 
-        <!-- Sign off -->
-        <tr>
-          <td style="padding: 0 48px 40px;">
-            <p style="margin: 0; font-size: 15px; line-height: 26px; color: #444444; font-family: 'Roboto', sans-serif;">
-              ${signOff}<br/><strong style="color: #1a1a1a;">${signOffName}</strong>
-            </p>
-          </td>
-        </tr>
+          <!-- Body continuation -->
+          <tr>
+            <td align="center" style="padding: 0 52px 32px;">
+              <p style="margin: 0; font-size: 15px; line-height: 26px; color: #555555; font-family: 'Roboto', sans-serif; text-align: center;">${bodyContinue}</p>
+            </td>
+          </tr>
 
-        <!-- Footer -->
-        <tr>
-          <td style="padding: 20px 48px; background: #f5f5f0; border-top: 1px solid #ebebeb; text-align: center; font-size: 12px; color: #999999; font-family: 'Roboto', sans-serif; border-radius: 0 0 24px 24px;">
-            You received this email because you signed up for The Neighborhood.
-          </td>
-        </tr>
+          <!-- CTA button -->
+          <tr>
+            <td align="center" style="padding: 0 48px 40px;">
+              <a href="${ctaUrl}" style="display: inline-block; font-family: 'Roboto', sans-serif; font-size: 14px; font-weight: 500; letter-spacing: 0.06em; color: #FFFFF2; background-color: #1a1a1a; text-decoration: none; padding: 14px 32px; border-radius: 100px;">${ctaText}</a>
+            </td>
+          </tr>
 
-      </table>
-    </td></tr>
+          <!-- Sign off -->
+          <tr>
+            <td align="center" style="padding: 0 48px 48px;">
+              <p style="margin: 0; font-size: 15px; line-height: 26px; color: #555555; font-family: 'Roboto', sans-serif; text-align: center;">
+                ${signOff}<br />
+                <span style="font-weight: 500; color: #1a1a1a;">${signOffName}</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding: 20px 48px; border-top: 1px solid #f0f0e8; background: #FFFFF2; font-size: 11px; line-height: 18px; color: #bbbbaa; font-family: 'Roboto', sans-serif; text-align: center;">
+              You received this email because you signed up for The Neighborhood.
+            </td>
+          </tr>
+
+        </table>
+        <!-- End card -->
+
+      </td>
+    </tr>
   </table>
 </body>
 </html>`
@@ -335,11 +387,11 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
  * 1. Validate firstname + lastname + email
  * 2. If image exists:
  *    - Generate image via OpenAI
- *    - Convert PNG buffer to WebP via sharp
- *    - Upload WebP to Supabase Storage
- *    - Return a Supabase transform URL (resized on CDN, cached)
+ *    - Convert PNG buffer to WebP via sharp → upload to community/
+ *    - Flatten PNG onto white background → upload to email/
+ *    - Return the community/ WebP public URL for the database
  * 3. Save user record to Supabase Database
- * 4. Send welcome email — includes baby token image if one was generated
+ * 4. Send welcome email — uses the email/ PNG URL if available
  */
 app.post("/submitMember", upload.single("image"), async (req, res) => {
   try {
@@ -375,9 +427,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     console.log("Incoming Neighbor:", { firstname, lastname, email, location, activity })
 
-    let imageUrl             = null
-    let originalImageUrl     = null
-    let welcomeEmailImageSrc = null
+    let imageUrl             = null   // WebP URL stored in DB and shown on site
+    let originalImageUrl     = null   // Raw upload backup
+    let welcomeEmailImageSrc = null   // White-background PNG URL used in email
 
     /**
      * ============================
@@ -419,11 +471,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         if (originalUploadError) {
           console.error("Original image upload failed:", originalUploadError.message)
         } else {
-          const { data: originalData } = supabase.storage
-            .from("neighbors")
-            .getPublicUrl(originalFilePath)
-
-          originalImageUrl = originalData.publicUrl
+          originalImageUrl = getPublicUrl(originalFilePath)
           console.log("Original image successfully stored:", originalImageUrl)
         }
 
@@ -462,16 +510,64 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           .toBuffer()
         console.log(`WebP conversion complete — PNG: ${pngBuffer.length} bytes → WebP: ${webpBuffer.length} bytes`)
 
-        // Flatten transparency onto white before encoding for email.
-        // Email clients do not support alpha channels — transparent areas
-        // would render as black without this step.
+        /**
+         * ============================
+         * UPLOAD EMAIL PNG
+         * ============================
+         *
+         * Email clients do not render transparency — transparent pixels
+         * are either shown as black or stripped entirely.
+         *
+         * Fix: use sharp's .flatten() to composite the alpha channel onto
+         * a solid white background (#FFFFF2) before encoding as PNG.
+         * .flatten() is the correct sharp method — it merges the alpha
+         * channel onto the colour. The .png({ background: ... }) option
+         * only sets metadata and does NOT fill transparency.
+         *
+         * We upload this as a real public URL rather than embedding it as
+         * a base64 data URI. Many email clients silently drop inline base64
+         * images above ~100 KB. A hosted URL has no such size limit and
+         * works reliably across Gmail, Outlook, and Apple Mail.
+         *
+         * This file lives in the email/ folder of the neighbors bucket.
+         * That folder must have a public SELECT policy in Supabase Storage.
+         * See deployment notes at the top of this file for the exact SQL.
+         */
+
+        console.log("Creating white-background PNG for email...")
         const emailPngBuffer = await sharp(webpBuffer)
           .flatten({ background: { r: 255, g: 255, b: 255 } })
           .png()
           .toBuffer()
-        welcomeEmailImageSrc = `data:image/png;base64,${emailPngBuffer.toString("base64")}`
+        console.log(`Email PNG created — size: ${emailPngBuffer.length} bytes`)
 
-        // File is now .webp — use that extension so Content-Type is correct
+        const emailFilePath = `email/${Date.now()}-${safeNameSlug}-email.png`
+        console.log("Uploading email PNG to Supabase:", emailFilePath)
+
+        const { error: emailUploadError } = await supabase.storage
+          .from("neighbors")
+          .upload(emailFilePath, emailPngBuffer, {
+            contentType:  "image/png",
+            cacheControl: "31536000",
+          })
+
+        if (emailUploadError) {
+          // Non-fatal: email will send without image rather than crashing
+          console.error("Email PNG upload failed:", emailUploadError.message)
+        } else {
+          welcomeEmailImageSrc = getPublicUrl(emailFilePath)
+          console.log("Email PNG ready at:", welcomeEmailImageSrc)
+        }
+
+        /**
+         * ============================
+         * UPLOAD WEBSITE WEBP
+         * ============================
+         *
+         * The website version stays as WebP with full transparency intact.
+         * Browsers handle alpha channels correctly — no flattening needed here.
+         */
+
         const filePath = `community/${Date.now()}-${safeNameSlug}.webp`
 
         console.log("Uploading WebP image to Supabase:", filePath)
@@ -489,11 +585,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           throw uploadError
         }
 
-        // Return a Supabase Image Transform URL — 200px wide, height auto-scales.
-        // Supabase resizes on the first request then serves from CDN cache forever.
-        imageUrl = getTransformedUrl(filePath)
+        imageUrl = getPublicUrl(filePath)
 
-        console.log("Image successfully stored and transform URL generated:", imageUrl)
+        console.log("Image successfully stored:", imageUrl)
 
       } catch (imageError) {
         // IMPORTANT: image failure does NOT crash the whole request
@@ -540,14 +634,15 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
      * still return a successful response to the frontend.
      * The user is already registered at this point.
      *
-     * The reconverted PNG is used for the email (keeps transparency) while
-     * the stored imageUrl remains WebP for the database. If no photo was
-     * uploaded, the block is omitted entirely.
+     * welcomeEmailImageSrc is the hosted white-background PNG URL.
+     * If the email upload failed, we pass null so the token block
+     * is cleanly omitted rather than showing a broken image.
+     * If no photo was uploaded at all, the block is also omitted.
      */
 
     try {
-      const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
-      const emailImageSrc  = welcomeEmailImageSrc || imageUrl
+      const welcomeSubject = `Welcome to the Neighborhood, ${firstname}!`
+      const emailImageSrc  = welcomeEmailImageSrc || null
       const { error: emailError } = await resend.emails.send({
         from:    EMAIL_FROM,
         to:      email,
