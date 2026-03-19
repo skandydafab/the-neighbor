@@ -245,16 +245,20 @@ STYLE RULES:
  */
 
 function getWelcomeEmailHtml(firstname, imageUrl = null) {
-  const introText = `We are so glad you're here. The Neighborhood is a cozy porch of kind, curious people, and you just earned a permanent seat at the table.`
-  const continuation = `Every once in a while, we share updates from The Local Lunatic, our inside playground, so keep an eye on your inbox. Say hello to your new friends here:`
+  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
+  const bodyText = `We are so happy to have you here. You are now officially
+    part of The Neighborhood — a growing community of creative,
+    kind, and curious people.`
   const ctaText = "Visit The Neighborhood"
   const ctaUrl = "https://theneighborr.com/neighborhood/en"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
 
+  const FONT_GEIST = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
+
   const imageSection = imageUrl
     ? `<tr>
-        <td align="center" style="padding:0 0 24px;background:linear-gradient(180deg,#ffffff,#f7f3ec);">
+        <td align="center" style="padding:0 0 24px;background-color:#fff2;">
           <img src="${imageUrl}" alt="Baby token" width="220" style="width:220px;height:auto;border-radius:16px;border:1px solid rgba(0,0,0,0.08);background-color:#fff;display:block;" />
         </td>
       </tr>`
@@ -264,17 +268,31 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome to The Neighborhood</title>
+  <style>
+    @font-face {
+      font-family: "Geist Mono";
+      src: url('${FONT_GEIST}') format("woff2");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    body {
+      font-family: "Geist Mono", "Courier New", monospace;
+      color: #231f20;
+      background-color: #fff7f2;
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f6f2ec;font-family:'Sora','Circular','Avenir',system-ui,sans-serif;color:#232323;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6f2ec;padding:36px 16px;">
+<body style="margin:0;padding:0;background-color:#fff7f2;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff7f2;padding:40px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border-radius:32px;overflow:hidden;box-shadow:0 35px 70px rgba(15,15,15,0.12);">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff2;border-radius:32px;overflow:hidden;box-shadow:0 18px 50px rgba(15,15,15,0.08);border:1px solid rgba(0,0,0,0.04);">
         <tr>
-          <td style="padding:40px 48px 32px;background:linear-gradient(180deg,#fef8ef,#fff);">
-            <p style="margin:0 0 18px;font-weight:600;font-size:24px;line-height:32px;color:#1c1c1c;">Hey ${firstname},</p>
-            <p style="margin:0 0 12px;font-size:17px;line-height:28px;color:#3a3a3a;">${introText}</p>
-            <p style="margin:0;font-size:17px;line-height:28px;color:#3a3a3a;">${continuation}</p>
+          <td style="padding:48px 48px 32px;">
+            <p style="margin:0 0 18px;font-weight:600;font-size:26px;line-height:34px;color:#1a1a1a;">${heading}</p>
+            <p style="margin:0;font-size:17px;line-height:28px;color:#3e3e3e;">${bodyText}</p>
           </td>
         </tr>
         ${imageSection}
