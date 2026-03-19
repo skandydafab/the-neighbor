@@ -245,50 +245,54 @@ STYLE RULES:
  */
 
 function getWelcomeEmailHtml(firstname, imageUrl = null) {
-  const bodyText = `
-    We are happy to have you here. You are now officially
-    part of The Neighborhood, a growing community of creative,
-    kind, and curious people. We hope you will enjoy our collection.
-  `
-  const bodyTextContinuation = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. You can say hello to your new friends here:"
+  const introText = `We are so glad you're here. The Neighborhood is a cozy porch of kind, curious people, and you just earned a permanent seat at the table.`
+  const continuation = `Every once in a while, we share updates from The Local Lunatic, our inside playground, so keep an eye on your inbox. Say hello to your new friends here:`
   const ctaText = "Visit The Neighborhood"
   const ctaUrl = "https://theneighborr.com/neighborhood/en"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
 
-  const babyTokenParagraph = imageUrl
-    ? `<p style="margin:14px 0 12px;font-size:16px;line-height:24px;color:#3a3a3a;">Here is your baby token:</p>
-      <p style="margin:0 0 18px;"><img src="${imageUrl}" alt="Baby token" width="180" style="width:180px;height:auto;border-radius:12px;border:1px solid rgba(0,0,0,0.08);" /></p>`
+  const imageSection = imageUrl
+    ? `<tr>
+        <td align="center" style="padding:0 0 24px;background:linear-gradient(180deg,#ffffff,#f7f3ec);">
+          <img src="${imageUrl}" alt="Baby token" width="220" style="width:220px;height:auto;border-radius:16px;border:1px solid rgba(0,0,0,0.08);background-color:#fff;display:block;" />
+        </td>
+      </tr>`
     : ""
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Welcome to the Neighbor Magazine!</title>
+  <title>Welcome to The Neighborhood</title>
 </head>
-<body style="margin:0;padding:0;background-color:#ffffff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:32px 0;">
+<body style="margin:0;padding:0;background-color:#f6f2ec;font-family:'Sora','Circular','Avenir',system-ui,sans-serif;color:#232323;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6f2ec;padding:36px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid rgba(0,0,0,0.08);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.05);">
-        <tr><td style="padding:30px 40px;">
-          <p style="margin:0 0 16px;font-size:16px;line-height:26px;">
-            ${bodyText.trim()}
-          </p>
-          ${imageUrl ? babyTokenParagraph : ""}
-          <p style="margin:0 0 4px;font-size:16px;line-height:26px;">
-            ${bodyTextContinuation}
-          </p>
-          <p style="margin:0 0 24px;font-size:16px;line-height:26px;">
-            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:underline;">${ctaText}</a>
-          </p>
-          <p style="margin:0;font-size:16px;line-height:26px;color:#3a3a3a;">
-            ${signOff}<br/><strong>${signOffName}</strong>
-          </p>
-        </td></tr>
-        <tr><td style="padding:16px 40px;text-align:center;border-top:1px solid rgba(0,0,0,0.08);font-size:12px;color:#6a6a6a;">
-          You received this email because you signed up for The Neighborhood.
-        </td></tr>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border-radius:32px;overflow:hidden;box-shadow:0 35px 70px rgba(15,15,15,0.12);">
+        <tr>
+          <td style="padding:40px 48px 32px;background:linear-gradient(180deg,#fef8ef,#fff);">
+            <p style="margin:0 0 18px;font-weight:600;font-size:24px;line-height:32px;color:#1c1c1c;">Hey ${firstname},</p>
+            <p style="margin:0 0 12px;font-size:17px;line-height:28px;color:#3a3a3a;">${introText}</p>
+            <p style="margin:0;font-size:17px;line-height:28px;color:#3a3a3a;">${continuation}</p>
+          </td>
+        </tr>
+        ${imageSection}
+        <tr>
+          <td style="padding:0 48px 32px;">
+            <a href="${ctaUrl}" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 26px;border-radius:999px;background:#1f1f1f;color:#ffffff;font-size:16px;text-decoration:none;font-weight:600;letter-spacing:0.01em;">${ctaText}</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 48px 38px;font-size:15px;line-height:24px;color:#5b5b5b;">
+            ${signOff}<br/><strong style="color:#232323;">${signOffName}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:12px 48px 24px;font-size:12px;text-align:center;color:#9a9a9a;background:#f3f0ea;">
+            You received this email because you signed up for The Neighborhood.
+          </td>
+        </tr>
       </table>
     </td></tr>
   </table>
@@ -356,6 +360,7 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     let imageUrl         = null
     let originalImageUrl = null
+    let welcomeEmailImageSrc = null
 
     /**
      * ============================
@@ -430,6 +435,8 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         if (!base64) {
           throw new Error("OpenAI returned no image data")
         }
+
+        welcomeEmailImageSrc = `data:image/png;base64,${base64}`
 
         // OpenAI returns a PNG buffer. Convert it to WebP before uploading.
         // This reduces file size by ~60-80%, meaning faster loads and less egress.
@@ -516,12 +523,14 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     try {
       const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
-      const { error: emailError } = await resend.emails.send({
-        from:    EMAIL_FROM,
-        to:      email,
-        subject: welcomeSubject,
-        html:    getWelcomeEmailHtml(firstname, imageUrl),
-      })
+        const emailImageSrc = welcomeEmailImageSrc || imageUrl
+
+        const { error: emailError } = await resend.emails.send({
+          from:    EMAIL_FROM,
+          to:      email,
+          subject: welcomeSubject,
+          html:    getWelcomeEmailHtml(firstname, emailImageSrc),
+        })
 
       if (emailError) {
         console.error("Welcome email failed:", emailError.message)
