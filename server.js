@@ -238,30 +238,29 @@ STYLE RULES:
  * Sends a branded welcome email after successful sign-up.
  *
  * @param {string}      firstname  — the new member's first name
- * @param {string|null} imageUrl   — public URL of the AI-generated baby token,
- *                                   or null if the user did not upload a selfie.
- *                                   When provided, the baby token is rendered
- *                                   between the two body paragraphs at 68px wide.
+ * @param {string|null} imageSrc   — PNG-ready URL/base64 for the baby token
+ *                                   rendered inside the email. When absent, the
+ *                                   block is omitted entirely.
  */
 
-function getWelcomeEmailHtml(firstname, imageUrl = null) {
-  const FONT_ROBOTO_IMPORT = "https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap"
-  const bodyText = `
-    We are happy to have you here. You are now officially
-    part of The Neighborhood, a growing community of creative,
-    kind, and curious people. We hope you will enjoy our collection.
-  `
-  const bodyTextContinuation = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. You can say hello to your new friends here:"
+function getWelcomeEmailHtml(firstname, imageSrc = null) {
+  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
+  const bodyText = `We are so happy to have you here. You are now officially part of The Neighborhood — a growing community of creative, kind, and curious people.`
+  const bodyContinue = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. Say hello to your new friends here:"
   const ctaText = "Visit The Neighborhood"
   const ctaUrl = "https://theneighborr.com/neighborhood/en"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
 
-  const babyTokenParagraph = imageUrl
-    ? `<div style="margin:22px 0 14px;text-align:center;">
-        <p style="margin:0 0 10px;font-size:16px;line-height:24px;color:#3a3a3a;">Here is your baby token:</p>
-        <img src="${imageUrl}" alt="Baby token" width="180" style="width:180px;height:auto;border-radius:16px;border:1px solid rgba(0,0,0,0.08);display:block;margin:0 auto;" />
-      </div>`
+  const babyTokenSection = imageSrc
+    ? `<tr>
+        <td align="center" style="padding:0 24px 16px;">
+          <div style="padding:20px;background:#ffffff;border-radius:28px;box-shadow:0 28px 60px rgba(255,94,150,0.25);">
+            <p style="margin:0 0 12px;font-size:16px;line-height:24px;color:#3a3a3a;font-family:'Roboto',sans-serif;">Here is your baby token:</p>
+            <img src="${imageSrc}" alt="Baby token" width="200" style="width:200px;height:auto;border-radius:18px;border:1px solid rgba(0,0,0,0.08);background:#fff;display:block;margin:0 auto;" />
+          </div>
+        </td>
+      </tr>`
     : ""
 
   return `<!DOCTYPE html>
@@ -271,38 +270,27 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome to the Neighbor Magazine!</title>
   <style>
-    @import url('${FONT_ROBOTO_IMPORT}');
-    body {
-      font-family: "Roboto Mono", "Courier New", monospace;
-      color: #1a1a1a;
-      background-color: #ffffff;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#ffffff;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fffaf6;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:#fff9f4;font-family:'Roboto','Helvetica Neue',sans-serif;color:#1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff9f4;padding:36px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#fffff2;border:1px solid rgba(0, 0, 0, 0.35);border-radius:32px;box-shadow:0 24px 60px rgba(0, 0, 0, 0.25);">
-        <tr><td style="padding:38px 44px 28px;">
-          <p style="margin:0 0 14px;font-size:16px;line-height:26px;">
-            ${bodyText.trim()}
-          </p>
-          <div style="display:flex;gap:8px;margin:0 0 18px;">
-            <span style="flex:1;height:4px;border-radius:999px;background:#ffb1d7;"></span>
-            <span style="flex:1;height:4px;border-radius:999px;background:#ffd9ec;"></span>
-          </div>
-          ${imageUrl ? babyTokenParagraph : ""}
-          <p style="margin:0 0 4px;font-size:16px;line-height:26px;">
-            ${bodyTextContinuation}
-          </p>
-          <p style="margin:0 0 24px;font-size:16px;line-height:26px;">
-            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:none;font-weight:600;border-bottom:2px solid #1a1a1a;padding-bottom:2px;">${ctaText}</a>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFF2;border-radius:34px;border:1px solid rgba(0,0,0,0.14);box-shadow:0 20px 48px rgba(15,15,15,0.18);">
+        <tr><td style="padding:42px 48px 32px;text-align:left;">
+          <p style="margin:0 0 20px;font-size:28px;line-height:36px;font-weight:700;display:inline-flex;align-items:center;color:#1a1a1a;">${heading}</p>
+          <div style="width:72px;height:4px;background:#ffbcd1;border-radius:999px;margin:18px 0;"></div>
+          <p style="margin:0 0 18px;font-size:17px;line-height:28px;color:#2b2b2b;">${bodyText}</p>
+          ${babyTokenSection}
+          <p style="margin:0 0 4px;font-size:16px;line-height:26px;color:#2b2b2b;">${bodyContinue}</p>
+          <p style="margin:0 0 26px;font-size:16px;line-height:26px;color:#2b2b2b;">
+            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:none;font-weight:600;border-bottom:3px solid #1a1a1a;padding-bottom:3px;">${ctaText}</a>
           </p>
           <p style="margin:0;font-size:16px;line-height:26px;color:#3a3a3a;">
-            ${signOff}<br/><strong>${signOffName}</strong>
+            ${signOff}<br/><strong style="color:#1a1a1a;">${signOffName}</strong>
           </p>
         </td></tr>
-        <tr><td style="padding:16px 44px;text-align:center;border-top:1px dashed rgba(0, 0, 0, 0.35);font-size:12px;color:#6a6a6a;">
+        <tr><td style="padding:18px 48px 26px;text-align:center;border-top:1px dashed rgba(0,0,0,0.2);font-size:12px;color:#5a5a5a;">
           You received this email because you signed up for The Neighborhood.
         </td></tr>
       </table>
@@ -448,8 +436,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           throw new Error("OpenAI returned no image data")
         }
 
-        welcomeEmailImageSrc = `data:image/png;base64,${base64}`
-
         // OpenAI returns a PNG buffer. Convert it to WebP before uploading.
         // This reduces file size by ~60-80%, meaning faster loads and less egress.
         const pngBuffer = Buffer.from(base64, "base64")
@@ -458,6 +444,9 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           .webp({ quality: WEBP_QUALITY })
           .toBuffer()
         console.log(`WebP conversion complete — PNG: ${pngBuffer.length} bytes → WebP: ${webpBuffer.length} bytes`)
+
+        const emailPngBuffer = await sharp(webpBuffer).png().toBuffer()
+        welcomeEmailImageSrc = `data:image/png;base64,${emailPngBuffer.toString("base64")}`
 
         // File is now .webp — use that extension so Content-Type is correct
         const filePath = `community/${Date.now()}-${safeNameSlug}.webp`
