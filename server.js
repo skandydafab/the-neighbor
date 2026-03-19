@@ -238,9 +238,8 @@ STYLE RULES:
  * Sends a branded welcome email after successful sign-up.
  *
  * @param {string}      firstname  — the new member's first name
- * @param {string|null} imageSrc   — PNG-ready URL/base64 for the baby token
- *                                   rendered inside the email. When absent, the
- *                                   block is omitted entirely.
+ * @param {string|null} imageSrc   — AI-generated Baby token URL (WebP) rendered
+ *                                   inside the email. When absent, the block is omitted.
  */
 
 function getWelcomeEmailHtml(firstname, imageSrc = null) {
@@ -255,7 +254,7 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
   const babyTokenSection = imageSrc
     ? `<tr>
         <td align="center" style="padding:0 24px 16px;">
-          <div style="padding:20px;background:#ffffff;border-radius:28px;box-shadow:0 28px 60px rgba(255,94,150,0.25);">
+          <div style="padding:20px;background:#ffffff;border-radius:28px;box-shadow:0 18px 45px rgba(0,0,0,0.12);">
             <p style="margin:0 0 12px;font-size:16px;line-height:24px;color:#3a3a3a;font-family:'Roboto',sans-serif;">Here is your baby token:</p>
             <img src="${imageSrc}" alt="Baby token" width="200" style="width:200px;height:auto;border-radius:18px;border:1px solid rgba(0,0,0,0.08);background:#fff;display:block;margin:0 auto;" />
           </div>
@@ -273,10 +272,10 @@ function getWelcomeEmailHtml(firstname, imageSrc = null) {
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#fff9f4;font-family:'Roboto','Helvetica Neue',sans-serif;color:#1a1a1a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff9f4;padding:36px 16px;">
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:'Roboto','Helvetica Neue',sans-serif;color:#1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;padding:36px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFF2;border-radius:34px;border:1px solid rgba(0,0,0,0.14);box-shadow:0 20px 48px rgba(15,15,15,0.18);">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFF2;border-radius:34px;border:1px solid rgba(0,0,0,0.18);box-shadow:0 24px 50px rgba(0,0,0,0.12);">
         <tr><td style="padding:42px 48px 32px;text-align:left;">
           <p style="margin:0 0 20px;font-size:28px;line-height:36px;font-weight:700;display:inline-flex;align-items:center;color:#1a1a1a;">${heading}</p>
           <div style="width:72px;height:4px;background:#ffbcd1;border-radius:999px;margin:18px 0;"></div>
@@ -360,7 +359,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     let imageUrl         = null
     let originalImageUrl = null
-    let welcomeEmailImageSrc = null
 
     /**
      * ============================
@@ -445,9 +443,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           .toBuffer()
         console.log(`WebP conversion complete — PNG: ${pngBuffer.length} bytes → WebP: ${webpBuffer.length} bytes`)
 
-        const emailPngBuffer = await sharp(webpBuffer).png().toBuffer()
-        welcomeEmailImageSrc = `data:image/png;base64,${emailPngBuffer.toString("base64")}`
-
         // File is now .webp — use that extension so Content-Type is correct
         const filePath = `community/${Date.now()}-${safeNameSlug}.webp`
 
@@ -524,12 +519,11 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     try {
       const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
-      const emailImageSrc = welcomeEmailImageSrc || imageUrl
       const { error: emailError } = await resend.emails.send({
         from:    EMAIL_FROM,
         to:      email,
         subject: welcomeSubject,
-        html:    getWelcomeEmailHtml(firstname, emailImageSrc),
+        html:    getWelcomeEmailHtml(firstname, imageUrl),
       })
 
       if (emailError) {
