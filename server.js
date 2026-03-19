@@ -245,23 +245,23 @@ STYLE RULES:
  */
 
 function getWelcomeEmailHtml(firstname, imageUrl = null) {
-  const heading = `Welcome to the Neighbor Magazine, ${firstname}!`
-  const bodyText = `We are so happy to have you here. You are now officially
-    part of The Neighborhood — a growing community of creative,
-    kind, and curious people.`
+  const FONT_GEIST = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
+  const bodyText = `
+    We are happy to have you here. You are now officially
+    part of The Neighborhood, a growing community of creative,
+    kind, and curious people. We hope you will enjoy our collection.
+  `
+  const bodyTextContinuation = "Every once in a while, you will receive our newsletter from the playground, The Local Lunatic, so keep an eye on your inbox. You can say hello to your new friends here:"
   const ctaText = "Visit The Neighborhood"
   const ctaUrl = "https://theneighborr.com/neighborhood/en"
   const signOff = "With love,"
   const signOffName = "The Neighbor Team"
 
-  const FONT_GEIST = "https://wtifsgubcdnvwxwfqxuh.supabase.co/storage/v1/object/public/frontend/fonts/geist-mono-regular.woff2"
-
-  const imageSection = imageUrl
-    ? `<tr>
-        <td align="center" style="padding:0 0 24px;background-color:#fff2;">
-          <img src="${imageUrl}" alt="Baby token" width="220" style="width:220px;height:auto;border-radius:16px;border:1px solid rgba(0,0,0,0.08);background-color:#fff;display:block;" />
-        </td>
-      </tr>`
+  const babyTokenParagraph = imageUrl
+    ? `<div style="margin:22px 0 14px;text-align:center;">
+        <p style="margin:0 0 10px;font-size:16px;line-height:24px;color:#3a3a3a;">Here is your baby token:</p>
+        <img src="${imageUrl}" alt="Baby token" width="180" style="width:180px;height:auto;border-radius:16px;border:1px solid rgba(0,0,0,0.08);display:block;margin:0 auto;" />
+      </div>`
     : ""
 
   return `<!DOCTYPE html>
@@ -269,7 +269,7 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to The Neighborhood</title>
+  <title>Welcome to the Neighbor Magazine!</title>
   <style>
     @font-face {
       font-family: "Geist Mono";
@@ -280,37 +280,37 @@ function getWelcomeEmailHtml(firstname, imageUrl = null) {
     }
     body {
       font-family: "Geist Mono", "Courier New", monospace;
-      color: #231f20;
-      background-color: #fff7f2;
+      color: #1a1a1a;
+      background-color: #fffaf6;
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#fff7f2;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff7f2;padding:40px 16px;">
+<body style="margin:0;padding:0;background-color:#fffaf6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fffaf6;padding:40px 0;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff2;border-radius:32px;overflow:hidden;box-shadow:0 18px 50px rgba(15,15,15,0.08);border:1px solid rgba(0,0,0,0.04);">
-        <tr>
-          <td style="padding:48px 48px 32px;">
-            <p style="margin:0 0 18px;font-weight:600;font-size:26px;line-height:34px;color:#1a1a1a;">${heading}</p>
-            <p style="margin:0;font-size:17px;line-height:28px;color:#3e3e3e;">${bodyText}</p>
-          </td>
-        </tr>
-        ${imageSection}
-        <tr>
-          <td style="padding:0 48px 32px;">
-            <a href="${ctaUrl}" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 26px;border-radius:999px;background:#1f1f1f;color:#ffffff;font-size:16px;text-decoration:none;font-weight:600;letter-spacing:0.01em;">${ctaText}</a>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:0 48px 38px;font-size:15px;line-height:24px;color:#5b5b5b;">
-            ${signOff}<br/><strong style="color:#232323;">${signOffName}</strong>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:12px 48px 24px;font-size:12px;text-align:center;color:#9a9a9a;background:#f3f0ea;">
-            You received this email because you signed up for The Neighborhood.
-          </td>
-        </tr>
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#fffff2;border:1px solid rgba(255,94,150,0.35);border-radius:32px;box-shadow:0 24px 60px rgba(255,94,150,0.25);">
+        <tr><td style="padding:38px 44px 28px;">
+          <p style="margin:0 0 14px;font-size:16px;line-height:26px;">
+            ${bodyText.trim()}
+          </p>
+          <div style="display:flex;gap:8px;margin:0 0 18px;">
+            <span style="flex:1;height:4px;border-radius:999px;background:#ffb1d7;"></span>
+            <span style="flex:1;height:4px;border-radius:999px;background:#ffd9ec;"></span>
+          </div>
+          ${imageUrl ? babyTokenParagraph : ""}
+          <p style="margin:0 0 4px;font-size:16px;line-height:26px;">
+            ${bodyTextContinuation}
+          </p>
+          <p style="margin:0 0 24px;font-size:16px;line-height:26px;">
+            <a href="${ctaUrl}" style="color:#1a1a1a;text-decoration:none;font-weight:600;border-bottom:2px solid #1a1a1a;padding-bottom:2px;">${ctaText}</a>
+          </p>
+          <p style="margin:0;font-size:16px;line-height:26px;color:#3a3a3a;">
+            ${signOff}<br/><strong>${signOffName}</strong>
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 44px;text-align:center;border-top:1px dashed rgba(255,94,150,0.35);font-size:12px;color:#6a6a6a;">
+          You received this email because you signed up for The Neighborhood.
+        </td></tr>
       </table>
     </td></tr>
   </table>
@@ -378,7 +378,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     let imageUrl         = null
     let originalImageUrl = null
-    let welcomeEmailImageSrc = null
 
     /**
      * ============================
@@ -453,8 +452,6 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
         if (!base64) {
           throw new Error("OpenAI returned no image data")
         }
-
-        welcomeEmailImageSrc = `data:image/png;base64,${base64}`
 
         // OpenAI returns a PNG buffer. Convert it to WebP before uploading.
         // This reduces file size by ~60-80%, meaning faster loads and less egress.
@@ -541,14 +538,12 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
 
     try {
       const welcomeSubject = `Welcome to the Neighbor Magazine, ${firstname}!`
-        const emailImageSrc = welcomeEmailImageSrc || imageUrl
-
-        const { error: emailError } = await resend.emails.send({
-          from:    EMAIL_FROM,
-          to:      email,
-          subject: welcomeSubject,
-          html:    getWelcomeEmailHtml(firstname, emailImageSrc),
-        })
+      const { error: emailError } = await resend.emails.send({
+        from:    EMAIL_FROM,
+        to:      email,
+        subject: welcomeSubject,
+        html:    getWelcomeEmailHtml(firstname, imageUrl),
+      })
 
       if (emailError) {
         console.error("Welcome email failed:", emailError.message)
