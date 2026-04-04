@@ -494,13 +494,19 @@ app.post("/submitMember", upload.single("image"), async (req, res) => {
           console.log("Original image successfully stored:", originalImageUrl)
         }
 
+        // Convert to RGBA PNG before sending to OpenAI
+        const rgbaPngBuffer = await sharp(req.file.buffer)
+          .ensureAlpha()
+          .png()
+          .toBuffer()
+        
         // Convert uploaded image buffer to OpenAI file
-        const openaiFile = await toFile(
-          req.file.buffer,
-          req.file.originalname || "upload.png",
-          { type: req.file.mimetype }
-        )
 
+        const openaiFile = await toFile(
+          rgbaPngBuffer, 
+          req.file.originalname || "upload.png",
+          { type: "image/png" })
+        
         console.log("Sending image to OpenAI...")
 
         const PROMPT = getPrompt(activity)
